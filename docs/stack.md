@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Policy | ACT via [LeRobot](https://github.com/huggingface/lerobot) 0.4.4 |
+| Policy | [ACT](https://huggingface.co/docs/lerobot/en/act) via [LeRobot](https://github.com/huggingface/lerobot) 0.4.4 |
 | Simulator | Isaac Sim 5.1.0 + Isaac Lab 2.3.2 |
 | Task | `Isaac-Lift-Cube-Franka-IK-Rel-v0` |
 | Python | 3.12.3 |
