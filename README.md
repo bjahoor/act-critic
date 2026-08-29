@@ -13,7 +13,6 @@ I wanted to build it over a weekend.
 | Policy | ACT via [LeRobot](https://github.com/huggingface/lerobot) 0.4.4 |
 | Simulator | Isaac Sim 5.1.0 + Isaac Lab 2.3.2 |
 | Task | `Isaac-Lift-Cube-Franka-IK-Rel-v0` |
-| PyTorch | 2.7.1+cu126 |
 | Python | 3.12.3 |
 | OS | Ubuntu 24.04 |
 
@@ -23,4 +22,3 @@ I wanted to build it over a weekend.
 |---|---|
 | RTX 3060 Ti, 8 GB | Isaac Sim |
 | RTX 3060, 12 GB | ACT training, inference |
-| Driver | 580.178.04 / CUDA 13.0 |
