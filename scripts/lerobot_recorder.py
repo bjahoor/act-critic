@@ -58,6 +58,7 @@ class EpisodeRecorder:
         )
         self.buffers: list[list[dict]] = [[] for _ in range(num_envs)]
         self.saved = 0
+        self._closed = False
 
     def _image(self, value) -> np.ndarray:
         image = _to_numpy(value)
@@ -109,4 +110,8 @@ class EpisodeRecorder:
             self.drop(env_id)
 
     def close(self) -> None:
+        # called explicitly after the loop and again via atexit, so make it idempotent
+        if self._closed:
+            return
+        self._closed = True
         self.dataset.finalize()

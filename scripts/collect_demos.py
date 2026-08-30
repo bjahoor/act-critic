@@ -4,20 +4,22 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Script to run an environment with a pick and lift state machine.
+Collect scripted pick-and-lift demonstrations as a LeRobot dataset.
 
-The state machine is implemented in the kernel function `infer_state_machine`.
-It uses the `warp` library to run the state machine in parallel on the GPU.
+Adapted from Isaac Lab's scripts/environments/state_machine/lift_cube_sm.py. The state machine is
+implemented in the warp kernel `infer_state_machine` and runs on the GPU across all environments.
 
 .. code-block:: bash
 
-    ./isaaclab.sh -p scripts/environments/state_machine/lift_cube_sm.py --num_envs 32
+    PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh scripts/collect_demos.py \
+      --num_envs 10 --enable_cameras --record --num_demos 100 --overwrite
 
 """
 
 """Launch Omniverse Toolkit first."""
 
 import argparse
+import atexit
 
 from isaaclab.app import AppLauncher
 
@@ -27,6 +29,11 @@ parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument("--record", action="store_true", default=False, help="Record a LeRobot dataset.")
+parser.add_argument("--num_demos", type=int, default=50, help="Stop after this many successful episodes.")
+parser.add_argument("--dataset_root", type=str, default="datasets/lift-cube-franka", help="Dataset directory.")
+parser.add_argument("--repo_id", type=str, default="local/lift-cube-franka", help="LeRobot dataset repo id.")
+parser.add_argument("--overwrite", action="store_true", default=False, help="Replace an existing dataset directory.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -57,8 +64,10 @@ from isaaclab_tasks.manager_based.manipulation.lift import mdp as lift_mdp
 from isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
+from lerobot_recorder import EpisodeRecorder
+
 # give up on an episode after this many steps
-MAX_EPISODE_STEPS = 250
+MAX_EPISODE_STEPS = 500
 
 # hold the cube at the goal this many steps before counting it a success
 SUCCESS_STEPS = 25
@@ -282,8 +291,11 @@ def main():
 
     # the lift task ships this check but does not register it. keep it to call ourselves,
     # and stop the clock so nothing resets behind us mid-episode
-    success_term = DoneTerm(func=lift_mdp.object_reached_goal, params={"threshold": 0.05})
+    success_term = DoneTerm(func=lift_mdp.object_reached_goal, params={"threshold": 0.1})
     env_cfg.terminations.time_out = None
+    # a dropped cube would otherwise reset the env inside env.step(), behind our back
+    dropped_term = env_cfg.terminations.object_dropping
+    env_cfg.terminations.object_dropping = None
 
     # add cameras to the scene
     env_cfg.scene.wrist_cam = CameraCfg(
@@ -328,7 +340,7 @@ def main():
     # create environment
     env = gym.make("Isaac-Lift-Cube-Franka-IK-Abs-v0", cfg=env_cfg)
     # reset environment at start
-    env.reset()
+    obs = env.reset()[0]
 
     # create action buffers (position + quaternion)
     actions = torch.zeros(env.unwrapped.action_space.shape, device=env.unwrapped.device)
@@ -344,19 +356,59 @@ def main():
     episode_steps = torch.zeros(env.unwrapped.num_envs, dtype=torch.long, device=env.unwrapped.device)
     # consecutive steps the cube has been at its goal, per env
     held_steps = torch.zeros(env.unwrapped.num_envs, dtype=torch.long, device=env.unwrapped.device)
+    # the step after a reset pairs the old episode's images with the new episode's state
+    skip_record = torch.zeros(env.unwrapped.num_envs, dtype=torch.bool, device=env.unwrapped.device)
+
+    robot = env.unwrapped.scene["robot"]
+    # recorded action is joint_pos_target, which must line up as 7 arm joints then the fingers
+    joint_names = robot.data.joint_names
+    assert joint_names[:7] == [f"panda_joint{i}" for i in range(1, 8)], joint_names
+    assert all("finger" in n for n in joint_names[7:]), joint_names
+    recorder = None
+    if args_cli.record:
+        recorder = EpisodeRecorder(
+            repo_id=args_cli.repo_id,
+            root=args_cli.dataset_root,
+            num_envs=env.unwrapped.num_envs,
+            state_dim=robot.data.joint_pos.shape[1],
+            image_shape=(env_cfg.scene.wrist_cam.height, env_cfg.scene.wrist_cam.width, 3),
+            fps=round(1.0 / (env_cfg.sim.dt * env_cfg.decimation)),
+            overwrite=args_cli.overwrite,
+        )
+        atexit.register(recorder.close)
 
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             # step environment
-            env.step(actions)
+            # the pair to record is the observation the action was computed from, so
+            # capture it before stepping. the joint target only exists after.
+            prev_obs = obs
+            prev_joint_pos = robot.data.joint_pos.clone()
+
+            obs = env.step(actions)[0]
             episode_steps += 1
 
             # nothing resets on its own now, so decide here
             at_goal = success_term.func(env.unwrapped, **success_term.params)
             held_steps = torch.where(at_goal, held_steps + 1, torch.zeros_like(held_steps))
             succeeded = held_steps >= SUCCESS_STEPS
-            dones = succeeded | (episode_steps >= MAX_EPISODE_STEPS)
+            dropped = dropped_term.func(env.unwrapped, **dropped_term.params)
+            dones = succeeded | dropped | (episode_steps >= MAX_EPISODE_STEPS)
+
+            if recorder is not None:
+                wrist = prev_obs["policy"]["wrist_cam"]
+                table = prev_obs["policy"]["table_cam"]
+                joint_pos = prev_joint_pos
+                # the IK can ask for angles the joints do not have; physx clamps them when
+                # moving the arm, so clamp the labels too rather than teaching impossible commands
+                limits = robot.data.joint_pos_limits
+                joint_target = robot.data.joint_pos_target.clamp(limits[..., 0], limits[..., 1])
+                for env_id in range(env.unwrapped.num_envs):
+                    if skip_record[env_id]:
+                        continue
+                    recorder.add(env_id, wrist[env_id], table[env_id], joint_pos[env_id], joint_target[env_id])
+                skip_record[:] = False
 
             # observations
             # -- end-effector frame
@@ -383,6 +435,16 @@ def main():
                 pick_sm.reset_idx(done_ids)
                 episode_steps[done_ids] = 0
                 held_steps[done_ids] = 0
+                skip_record[done_ids] = True
+                if recorder is not None:
+                    for env_id in done_ids.tolist():
+                        recorder.finish(env_id, success=bool(succeeded[env_id]))
+                    if recorder.saved >= args_cli.num_demos:
+                        print(f"[RECORD] saved {recorder.saved} episodes", flush=True)
+                        break
+
+    if recorder is not None:
+        recorder.close()
 
     # close the environment
     env.close()
