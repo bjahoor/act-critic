@@ -12,7 +12,7 @@
 
 **Hardware**
 
-| GPU | Role |
+| Where | Role |
 |---|---|
 | RTX 3060 Ti, 8 GB | Isaac Sim |
-| RTX 3060, 12 GB | ACT training, inference |
+| HF Jobs | ACT training |
