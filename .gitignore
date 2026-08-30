@@ -2,3 +2,5 @@ IsaacLab
 __pycache__/
 *.pyc
 outputs/
+datasets/
+${data}/
