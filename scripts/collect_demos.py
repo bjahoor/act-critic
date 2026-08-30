@@ -49,11 +49,19 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets.rigid_object.rigid_object_data import RigidObjectData
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.sensors import CameraCfg
 
 import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.manager_based.manipulation.lift import mdp as lift_mdp
 from isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
+
+# give up on an episode after this many steps
+MAX_EPISODE_STEPS = 250
+
+# hold the cube at the goal this many steps before counting it a success
+SUCCESS_STEPS = 25
 
 # initialize warp
 wp.init()
@@ -272,6 +280,11 @@ def main():
     # markers are rendered prims and would show up in the camera images
     env_cfg.commands.object_pose.debug_vis = False
 
+    # the lift task ships this check but does not register it. keep it to call ourselves,
+    # and stop the clock so nothing resets behind us mid-episode
+    success_term = DoneTerm(func=lift_mdp.object_reached_goal, params={"threshold": 0.05})
+    env_cfg.terminations.time_out = None
+
     # add cameras to the scene
     env_cfg.scene.wrist_cam = CameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/panda_hand/wrist_cam",
@@ -327,12 +340,23 @@ def main():
     pick_sm = PickAndLiftSm(
         env_cfg.sim.dt * env_cfg.decimation, env.unwrapped.num_envs, env.unwrapped.device, position_threshold=0.01
     )
+    # steps taken in the current episode, per env
+    episode_steps = torch.zeros(env.unwrapped.num_envs, dtype=torch.long, device=env.unwrapped.device)
+    # consecutive steps the cube has been at its goal, per env
+    held_steps = torch.zeros(env.unwrapped.num_envs, dtype=torch.long, device=env.unwrapped.device)
 
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             # step environment
-            dones = env.step(actions)[-2]
+            env.step(actions)
+            episode_steps += 1
+
+            # nothing resets on its own now, so decide here
+            at_goal = success_term.func(env.unwrapped, **success_term.params)
+            held_steps = torch.where(at_goal, held_steps + 1, torch.zeros_like(held_steps))
+            succeeded = held_steps >= SUCCESS_STEPS
+            dones = succeeded | (episode_steps >= MAX_EPISODE_STEPS)
 
             # observations
             # -- end-effector frame
@@ -352,9 +376,13 @@ def main():
                 torch.cat([desired_position, desired_orientation], dim=-1),
             )
 
-            # reset state machine
+            # reset the finished envs and their state machines
             if dones.any():
-                pick_sm.reset_idx(dones.nonzero(as_tuple=False).squeeze(-1))
+                done_ids = dones.nonzero(as_tuple=False).squeeze(-1)
+                env.unwrapped.reset(env_ids=done_ids)
+                pick_sm.reset_idx(done_ids)
+                episode_steps[done_ids] = 0
+                held_steps[done_ids] = 0
 
     # close the environment
     env.close()
