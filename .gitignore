@@ -1,6 +1,6 @@
 IsaacLab
 __pycache__/
 *.pyc
-outputs/
 datasets/
+.venv-lerobot
 ${data}/
