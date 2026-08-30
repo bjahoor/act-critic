@@ -16,3 +16,4 @@
 |---|---|
 | RTX 3060 Ti, 8 GB | Isaac Sim |
 | HF Jobs | ACT training |
+| RTX 3060, 12 GB | Inference |
