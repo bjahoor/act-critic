@@ -1,11 +1,54 @@
 # act-critic
 
-A weekend proof of concept: ACT with a built-in critic head.
+Over one weekend I built a proof of concept: a modified ACT architecture with a built-in critic head. Start
+to finish, trained and tested in simulation.
 
-One model, one forward pass, two outputs — the action chunk, and a live score for "am I failing now".
+The task is a Franka Panda arm lifting a cube to a fixed point in Isaac Sim. The policy learns it from
+scripted demonstrations, and lands at a success rate that is deliberately mediocre — it has to fail often
+enough to give the critic head something to detect.
 
-Runtime failure detectors are usually a second model watching the first. This one lives inside it, reading
-the policy's own perception rather than guessing at it from the outside.
+Runtime failure detectors are usually a second model watching the first. This one lives inside the policy,
+reading its own perception rather than inferring from the outside.
+
+---
+
+## Runtime Demo
+
+The live demo, streamed out of Isaac Sim. Recorded runs are in [docs/videos/](docs/videos/).
+
+![The gripper closed just above the cube; the failure score reads 0.80](docs/images/live_demo.png)
+
+The gripper closed just above the cube. The score climbs once the grasp misses.
+
+---
+
+## Runtime Loop
+
+What happens on every step at runtime.
+
+```
+                      2 cameras 200x200 RGB  +  7 arm joints
+        ┌─────────────────────────────────────────────────┐
+        │                                                 v
+  ┌─────┴───────────┐                       ┌─────────────────────────────────┐
+  │    Isaac Sim    │                       │        ACT + critic head        │
+  │  lift the cube  │                       │       ACT weights frozen        │
+  │ 50 steps / sec  │                       │      one pass, two outputs      │
+  └─────┬───────────┘                       └───────┬───────────────────┬─────┘
+        │                                           │                   │
+        │     9 joint targets                       │                   │
+        └───────────────────────────────────────────┘                   │
+          100-step chunk, first 10 executed                             v
+                                                                  failure_score
+                                                                   0.00 - 1.00
+                                                                        │
+                                                                        v
+                                                                 ┌─────────────┐
+                                                                 │ score panel │
+                                                                 └──────┬──────┘
+                                                                        │
+   viewport + panel ──> WebRTC ──> remote viewer <──────────────────────┘
+```
 
 ---
 
@@ -90,8 +133,8 @@ Mean pooling is the same operation with every weight fixed at 1/100.
 | 10 | [Critic Head](docs/worklog/phase_10.md) | The design: where it attaches, what it reads, why ABMIL |
 | 11 | [The Model File](docs/worklog/phase_11.md) | Building it. The hook, the frozen proof, one bug |
 | 12 | [Training Script](docs/worklog/phase_12.md) | Caching the frozen trunk, TCE and ACM, feeding the GPU |
-| 13 | [Training Run](docs/worklog/phase_13.md) | 0.99 episode AP, and why that number is optimistic |
-| 14 | [Held-Out Measurement](docs/worklog/phase_14.md) | The honest numbers: 94% caught, 4% false alarms, first alarm at 1.86 s |
+| 13 | [Training Run](docs/worklog/phase_13.md) | The first run, and why its score flatters itself |
+| 14 | [Held-Out Measurement](docs/worklog/phase_14.md) | Scoring on episodes never trained on, against a training-free baseline |
 | 15 | [Live Score Display](docs/worklog/phase_15.md) | The on-screen readout, streamed |
 | 16 | [Live Demo](docs/worklog/phase_16.md) | Running it: three checkpoints, and what the demo does not measure |
 

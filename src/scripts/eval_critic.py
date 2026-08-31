@@ -150,6 +150,10 @@ class ScorePanel:
 
     def reset(self, env_id: int) -> None:
         self.above[env_id] = 0
+        # the plot holds 200 steps and does not know about episodes, so without this the
+        # previous episode's tail stays on screen and reads as this one's history.
+        # LiveLinePlot.clear() drops every series, which is correct only while NUM_ENVS is 1
+        self.plot.clear()
 
     def update(self, scores: list[float | None]) -> None:
         for i, (model, label, score) in enumerate(zip(self.bars, self.labels, scores)):
