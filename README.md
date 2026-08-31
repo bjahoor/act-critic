@@ -17,11 +17,11 @@ reading its own perception rather than inferring from the outside.
 | | |
 |---|---|
 | [Runtime Demo](#runtime-demo) | A picture of it running |
-| [Runtime Loop](#runtime-loop) | Every step at runtime |
+| [Runtime Loop](#runtime-loop) | What happens on every step at runtime |
 | [Critic Head](#critic-head) | My modified ACT architecture |
-| [Inside the Critic Head](#inside-the-critic-head) | The head's own architecture |
-| [ABMIL, per frame](#abmil-per-frame-attention-based-multiple-instance-learning) | The pooling method, from [the paper](https://arxiv.org/abs/1802.04712) |
-| [Datasets](docs/huggingface.md) | Everything on the Hugging Face Hub |
+| [Inside the Critic Head](#inside-the-critic-head) | The architecture I chose for the head itself |
+| [ABMIL, per frame](#abmil-per-frame-attention-based-multiple-instance-learning) | The pooling method, implemented from the paper: [Ilse et al., ICML 2018](https://arxiv.org/abs/1802.04712) |
+| [Datasets](docs/huggingface.md) | Every dataset and checkpoint on the Hugging Face Hub |
 | [Worklog](#worklog) | Every phase of the build |
 | [Stack](#stack) | Versions and hardware |
 | [Run It](#run-it) | The command |
