@@ -7,7 +7,9 @@ One model, one forward pass, two outputs — the action chunk, and a live score 
 Runtime failure detectors are usually a second model watching the first. This one lives inside it, reading
 the policy's own perception rather than guessing at it from the outside.
 
-## Critic head
+---
+
+## Critic Head
 
 ACT's architecture, modified to include the critic head, branching off the encoder.
 
@@ -33,7 +35,9 @@ ACT's architecture, modified to include the critic head, branching off the encod
                                                                                1 = failing
 ```
 
-## Inside the critic head
+---
+
+## Inside the Critic Head
 
 Inside that box. 100 scene tokens and two scalars in, one score out.
 
@@ -66,6 +70,8 @@ Scored by [src/scripts/measure_critic.py](src/scripts/measure_critic.py)
 ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
 summing to 1, and blends the tokens by them.
 Mean pooling is the same operation with every weight fixed at 1/100.
+
+---
 
 ## Worklog
 
