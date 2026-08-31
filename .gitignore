@@ -5,3 +5,5 @@ datasets/
 .venv-lerobot
 ${data}/
 checkpoints/
+.astro/
+node_modules/
