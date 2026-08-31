@@ -72,6 +72,16 @@ MAX_EPISODE_STEPS = 500
 # hold the cube at the goal this many steps before counting it a success
 SUCCESS_STEPS = 25
 
+# the arm joints. the finger positions are deliberately left out of the recorded state:
+# with them in, the policy learns to copy its own gripper state and never closes
+ARM_JOINTS = 7
+
+# a single goal, the centre of the range the task ships
+GOAL = mdp.UniformPoseCommandCfg.Ranges(
+    pos_x=(0.5, 0.5), pos_y=(0.0, 0.0), pos_z=(0.375, 0.375),
+    roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0),
+)
+
 # initialize warp
 wp.init()
 
@@ -287,7 +297,10 @@ def main():
         use_fabric=not args_cli.disable_fabric,
     )
     # markers are rendered prims and would show up in the camera images
-    env_cfg.commands.object_pose.debug_vis = False
+    env_cfg.commands.object_pose.debug_vis = not args_cli.record
+    # the goal is randomized per episode but the policy never sees it, so the task is not
+    # learnable from pixels. one fixed point instead
+    env_cfg.commands.object_pose.ranges = GOAL
 
     # the lift task ships this check but does not register it. keep it to call ourselves,
     # and stop the clock so nothing resets behind us mid-episode
@@ -370,7 +383,8 @@ def main():
             repo_id=args_cli.repo_id,
             root=args_cli.dataset_root,
             num_envs=env.unwrapped.num_envs,
-            state_dim=robot.data.joint_pos.shape[1],
+            state_dim=ARM_JOINTS,
+            action_dim=robot.data.joint_pos.shape[1],
             image_shape=(env_cfg.scene.wrist_cam.height, env_cfg.scene.wrist_cam.width, 3),
             fps=round(1.0 / (env_cfg.sim.dt * env_cfg.decimation)),
             overwrite=args_cli.overwrite,
@@ -399,7 +413,7 @@ def main():
             if recorder is not None:
                 wrist = prev_obs["policy"]["wrist_cam"]
                 table = prev_obs["policy"]["table_cam"]
-                joint_pos = prev_joint_pos
+                joint_pos = prev_joint_pos[:, :ARM_JOINTS]
                 # the IK can ask for angles the joints do not have; physx clamps them when
                 # moving the arm, so clamp the labels too rather than teaching impossible commands
                 limits = robot.data.joint_pos_limits

@@ -12,12 +12,10 @@ import atexit
 
 from isaaclab.app import AppLauncher
 
-# the four published checkpoints, all trained identically and differing only in steps
+# the published checkpoints. the v1 run is discarded, see phase 06
 CHECKPOINTS = {
-    "25k": "bjahoor/act-lift-cube-franka-25k",
-    "50k": "bjahoor/act-lift-cube-franka-50k",
-    "75k": "bjahoor/act-lift-cube-franka-75k",
-    "100k": "bjahoor/act-lift-cube-franka",
+    "25k": "bjahoor/act-lift-cube-franka-v2-25k",
+    "50k": "bjahoor/act-lift-cube-franka-v2",
 }
 
 # add argparse arguments
@@ -74,6 +72,20 @@ MAX_EPISODE_STEPS = 500
 # hold the cube at the goal this many steps before counting it a success
 SUCCESS_STEPS = 25
 
+# the open finger target the binary gripper command produced during collection, and the
+# cutoff below which a predicted target counts as a close
+FINGER_OPEN = 0.04
+FINGER_CLOSE_BELOW = 0.03
+
+# the arm joints. the fingers are left out of the state, matching collection
+ARM_JOINTS = 7
+
+# a single goal, matching collection
+GOAL = mdp.UniformPoseCommandCfg.Ranges(
+    pos_x=(0.5, 0.5), pos_y=(0.0, 0.0), pos_z=(0.375, 0.375),
+    roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0),
+)
+
 
 def main():
     # parse configuration. the joint-command task, so the policy's 9 joint targets are
@@ -98,6 +110,7 @@ def main():
     # the goal is resampled every 5 s by default, which is inside an episode here. the
     # policy cannot see the goal, so a moving one silently invalidates the success check
     env_cfg.commands.object_pose.resampling_time_range = (1.0e6, 1.0e6)
+    env_cfg.commands.object_pose.ranges = GOAL
 
     # the lift task ships this check but does not register it. keep it to call ourselves,
     # and stop the clock so nothing resets behind us mid-episode
@@ -181,7 +194,8 @@ def main():
             repo_id=args_cli.repo_id,
             root=args_cli.dataset_root,
             num_envs=env.unwrapped.num_envs,
-            state_dim=robot.data.joint_pos.shape[1],
+            state_dim=ARM_JOINTS,
+            action_dim=robot.data.joint_pos.shape[1],
             image_shape=(env_cfg.scene.wrist_cam.height, env_cfg.scene.wrist_cam.width, 3),
             fps=round(1.0 / (env_cfg.sim.dt * env_cfg.decimation)),
             overwrite=args_cli.overwrite,
@@ -205,19 +219,23 @@ def main():
             wrist = obs["policy"]["wrist_cam"]
             table = obs["policy"]["table_cam"]
             joint_pos = robot.data.joint_pos.clone()
+            state = joint_pos[:, :ARM_JOINTS]
 
             # the env renders uint8 HWC, ACT wants float CHW normalized with the
             # checkpoint's own stats
             batch = {
                 "observation.images.wrist": wrist.permute(0, 3, 1, 2).float() / 255.0,
                 "observation.images.table": table.permute(0, 3, 1, 2).float() / 255.0,
-                "observation.state": joint_pos,
+                "observation.state": state,
                 "task": [TASK] * env.unwrapped.num_envs,
             }
             batch = preprocessor(batch)
             # select_action only predicts every n_action_steps, TCE needs one per step
             chunk = postprocessor(policy.predict_action_chunk(batch)) if recorder is not None else None
             actions = postprocessor(policy.select_action(batch)).to(env.unwrapped.device)
+            # the demos only ever held the fingers fully open or fully closed, so ACT
+            # regresses the midpoint when unsure and the gripper never grips. snap it back
+            actions[:, 7:] = torch.where(actions[:, 7:] < FINGER_CLOSE_BELOW, 0.0, FINGER_OPEN)
             # the policy can ask for angles the joints do not have; physx clamps them anyway
             limits = robot.data.joint_pos_limits
             actions = actions.clamp(limits[..., 0], limits[..., 1])
@@ -238,7 +256,7 @@ def main():
                     if skip_record[env_id]:
                         continue
                     recorder.add(
-                        env_id, wrist[env_id], table[env_id], joint_pos[env_id], actions[env_id], object_pos[env_id]
+                        env_id, wrist[env_id], table[env_id], state[env_id], actions[env_id], object_pos[env_id]
                     )
                     # one chunk per recorded frame, or the two drift apart by a step
                     chunks.append(chunk[env_id].cpu().numpy())

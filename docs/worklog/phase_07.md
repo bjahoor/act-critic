@@ -18,6 +18,8 @@ Off, `collect_demos.py` is unchanged.
 Rollout mode also stores the cube position per frame and why the episode ended. Without them the label is
 episode-wide, and when a failure began cannot be recovered without re-running.
 
+State and action dims are separate now — 7 arm joints in, 9 joint targets out.
+
 ## 2. Task
 
 `Isaac-Lift-Cube-Franka-v0`, the joint-command task. ACT emits the 9-vector it was trained on, the env takes it
@@ -36,20 +38,20 @@ gripper, which does not.
 
 `HIGH_PD` because `IK-Abs` sets it and this task does not.
 
-The goal is resampled every 5 s by default, inside an episode here. The policy cannot see the goal, so a moving one
-invalidates the success check — frozen.
+The goal is the fixed point from [phase 04](phase_04.md), and resampling is disabled — the default 5 s would fall
+inside an episode here.
+
+The demos only ever held the fingers fully open or fully closed, so the policy regresses the midpoint when unsure.
+Predictions below 0.03 are snapped closed, the rest open.
 
 ## 3. Policy
 
-The state machine and its warp kernel are deleted. `--model` picks a checkpoint, all trained identically and
-differing only in steps.
+The state machine and its warp kernel are deleted. `--model` picks a checkpoint.
 
 | Flag | Repo |
 |---|---|
-| `25k` | `bjahoor/act-lift-cube-franka-25k` |
-| `50k` | `bjahoor/act-lift-cube-franka-50k` |
-| `75k` | `bjahoor/act-lift-cube-franka-75k` |
-| `100k` | `bjahoor/act-lift-cube-franka` |
+| `25k` | `bjahoor/act-lift-cube-franka-v2-25k` |
+| `50k` | `bjahoor/act-lift-cube-franka-v2` |
 
 `--num_envs 1`, asserted — one action queue for the whole batch, no per-env reset. `policy.reset()` at every boundary.
 
@@ -65,13 +67,13 @@ Success rate only.
 
 ```bash
 LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 100k --num_rollouts 50 --enable_cameras
+  scripts/eval_policy.py --model 50k --num_rollouts 50 --enable_cameras
 ```
 
 Rollouts for the head.
 
 ```bash
 LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 50k --num_rollouts 300 --enable_cameras \
+  scripts/eval_policy.py --model 25k --num_rollouts 300 --enable_cameras \
   --record --dataset_root datasets/rollouts --overwrite
 ```

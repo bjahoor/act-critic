@@ -34,6 +34,7 @@ class EpisodeRecorder:
         root: str,
         num_envs: int,
         state_dim: int,
+        action_dim: int,
         image_shape: tuple[int, int, int],
         fps: int = 50,
         overwrite: bool = False,
@@ -46,6 +47,7 @@ class EpisodeRecorder:
             shutil.rmtree(root_path)
 
         self.state_dim = state_dim
+        self.action_dim = action_dim
         self.image_shape = image_shape
         self.keep_failures = keep_failures
         # lerobot rejects a frame carrying a field the dataset did not declare, so these
@@ -66,7 +68,7 @@ class EpisodeRecorder:
                 "observation.images.wrist": {"dtype": "video", "shape": image_shape, "names": ["height", "width", "channels"]},
                 "observation.images.table": {"dtype": "video", "shape": image_shape, "names": ["height", "width", "channels"]},
                 "observation.state": {"dtype": "float32", "shape": (state_dim,), "names": None},
-                "action": {"dtype": "float32", "shape": (state_dim,), "names": None},
+                "action": {"dtype": "float32", "shape": (action_dim,), "names": None},
                 **rollout_features,
             },
         )
@@ -97,7 +99,7 @@ class EpisodeRecorder:
             "observation.images.wrist": self._image(wrist),
             "observation.images.table": self._image(table),
             "observation.state": self._vector(state, "state"),
-            "action": self._vector(action, "action"),
+            "action": self._vector(action, "action", self.action_dim),
             "task": TASK,
         }
         if self.keep_failures:

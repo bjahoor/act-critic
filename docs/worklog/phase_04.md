@@ -6,10 +6,14 @@ Absolute joint positions, ACT's default.
 
 | Field | Source | Shape |
 |---|---|---|
-| `observation.state` | `robot.data.joint_pos` | 9 |
+| `observation.state` | `robot.data.joint_pos`, arm only | 7 |
 | `action` | `robot.data.joint_pos_target` | 9 |
 
 State captured before the step, target after.
+
+The two finger positions are left out of the state on purpose. With them in, open fingers are always followed by an
+open command and closed by closed, so the policy learns to copy its own gripper state and never closes. See
+[phase 06](phase_06.md).
 
 [Action representations](https://huggingface.co/docs/lerobot/en/action_representations)
 
@@ -53,13 +57,26 @@ env_cfg.terminations.object_dropping = None
 
 0.1 is generous on purpose — the failures worth detecting are dropped or missed grasps, not a few cm short.
 
-## 4. Manual reset
+## 4. Fixed goal
+
+The goal is randomized per episode and the policy never sees it, so the task is not learnable from pixels plus arm
+state. One point instead, the centre of the shipped range.
+
+```python
+env_cfg.commands.object_pose.ranges = mdp.UniformPoseCommandCfg.Ranges(
+    pos_x=(0.5, 0.5), pos_y=(0.0, 0.0), pos_z=(0.375, 0.375), ...
+)
+```
+
+The cube rests at z 0.055, so a real lift is still required.
+
+## 5. Manual reset
 
 Episodes end on a 0.5 s hold at the goal, a dropped cube, or a 500-step giveup. Only that env resets.
 
 500 steps is 10 s. The expert finishes in ~150; the headroom is for a slower ACT policy.
 
-## 5. Record
+## 6. Record
 
 - First step after a reset is skipped, it mixes two episodes.
 - Actions clamped to `joint_pos_limits`; the IK can ask for angles the joints do not have.
