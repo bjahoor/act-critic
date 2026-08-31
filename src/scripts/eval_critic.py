@@ -5,7 +5,9 @@ and an on-screen readout, so a person watching the stream sees the score move wh
 robot works. Nothing is recorded — `eval_policy.py` owns that.
 
     LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python \
-      ~/isaacsim/python.sh src/scripts/eval_critic.py --model 20k --num_envs 4 --enable_cameras
+      ~/isaacsim/python.sh src/scripts/eval_critic.py --model 20k --enable_cameras
+
+One robot, running until the window is closed.
 """
 
 """Launch Omniverse Toolkit first."""
@@ -29,15 +31,23 @@ CHECKPOINTS = {
     "50k": "bjahoor/act-lift-cube-franka-v2",
 }
 
+# one robot, watched. parallel envs exist for recording throughput and here only split
+# attention and VRAM
+NUM_ENVS = 1
+
+# the operating point measure_critic reports: 0.95 held for 0.5 s catches 94% of failures
+# on held-out rollouts and interrupts 4% of good ones
+ALARM_THRESHOLD = 0.95
+ALARM_HOLD_STEPS = 25
+
 parser = argparse.ArgumentParser(description="Roll out ACT with the critic head and display the score.")
 parser.add_argument("--model", type=str, default="20k", choices=list(CHECKPOINTS), help="Which trained checkpoint to roll out.")
 parser.add_argument("--critic", type=str, default="checkpoints/critic-abmil/critic.pt", help="Trained head. Untrained if absent.")
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=4, help="Number of environments to simulate.")
-parser.add_argument("--num_rollouts", type=int, default=50, help="Stop after this many episodes.")
-parser.add_argument("--threshold", type=float, default=0.5, help="Score above which the readout reads FAILING.")
+parser.add_argument("--threshold", type=float, default=ALARM_THRESHOLD,
+                    help="Score the head must hold to read FAILING.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -105,11 +115,15 @@ class ScorePanel:
     readout inside `wrist_cam` and `table_cam`, which are the policy's observations.
     """
 
-    def __init__(self, num_envs: int, threshold: float):
+    def __init__(self, num_envs: int, threshold: float, hold: int = ALARM_HOLD_STEPS):
         import omni.ui as ui
         from isaaclab.ui.widgets import LiveLinePlot
 
         self.threshold = threshold
+        # a single frame over the line is not a detection, in the readout any more than in
+        # measure_critic. without this the display disagrees with the reported numbers
+        self.hold = hold
+        self.above = [0] * num_envs
         self.bars, self.labels = [], []
         self.window = ui.Window(
             "Failure Score", width=340, height=120 + 34 * num_envs,
@@ -134,14 +148,19 @@ class ScorePanel:
                     max_datapoints=200,
                 )
 
+    def reset(self, env_id: int) -> None:
+        self.above[env_id] = 0
+
     def update(self, scores: list[float | None]) -> None:
-        for model, label, score in zip(self.bars, self.labels, scores):
+        for i, (model, label, score) in enumerate(zip(self.bars, self.labels, scores)):
             if score is None:
                 model.set_value(0.0)
                 label.text = "warmup"
                 continue
+            self.above[i] = self.above[i] + 1 if score >= self.threshold else 0
             model.set_value(score)
-            label.text = f"{score:.2f} {'FAILING' if score >= self.threshold else 'ok'}"
+            state = "FAILING" if self.above[i] >= self.hold else "ok"
+            label.text = f"{score:.2f} {state}"
         self.plot.add_datapoint([0.0 if s is None else s for s in scores])
 
 
@@ -170,7 +189,7 @@ def main():
     env_cfg: LiftEnvCfg = parse_env_cfg(
         "Isaac-Lift-Cube-Franka-v0",
         device=args_cli.device,
-        num_envs=args_cli.num_envs,
+        num_envs=NUM_ENVS,
         use_fabric=not args_cli.disable_fabric,
     )
     # the demos were recorded under the stiffer controller that IK-Abs sets and this task does not
@@ -294,7 +313,8 @@ def main():
     finished = 0
     succeeded_count = 0
 
-    while simulation_app.is_running() and finished < args_cli.num_rollouts:
+    # runs until the window is closed
+    while simulation_app.is_running():
         with torch.inference_mode():
             wrist = obs["policy"]["wrist_cam"]
             table = obs["policy"]["table_cam"]
@@ -367,6 +387,10 @@ def main():
                 for env_id in done_ids.tolist():
                     policies[env_id].reset()
                     chunk_history[env_id].clear()
+                    # or a run of high frames carries across the episode boundary and the
+                    # next episode inherits an alarm it did not earn
+                    if panel is not None:
+                        panel.reset(env_id)
                 episode_steps[done_ids] = 0
                 held_steps[done_ids] = 0
                 for env_id in done_ids.tolist():
