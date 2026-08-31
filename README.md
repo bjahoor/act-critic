@@ -12,6 +12,22 @@ reading its own perception rather than inferring from the outside.
 
 ---
 
+## TL;DR
+
+| | |
+|---|---|
+| [Runtime Demo](#runtime-demo) | A picture of it running |
+| [Runtime Loop](#runtime-loop) | What happens on every step at runtime |
+| [Critic Head](#critic-head) | My modified ACT architecture |
+| [Inside the Critic Head](#inside-the-critic-head) | The architecture I chose for the head itself |
+| [ABMIL, per frame](#abmil-per-frame-attention-based-multiple-instance-learning) | The pooling method, implemented from the paper: [Ilse et al., ICML 2018](https://arxiv.org/abs/1802.04712) |
+| [Datasets](docs/huggingface.md) | Every dataset and checkpoint on the Hugging Face Hub |
+| [Worklog](#worklog) | Every phase of the build |
+| [Stack](#stack) | Versions and hardware |
+| [Run It](#run-it) | The command |
+
+---
+
 ## Runtime Demo
 
 The live demo, streamed out of Isaac Sim. Recorded runs are in [docs/videos/](docs/videos/).
@@ -31,7 +47,7 @@ What happens on every step at runtime.
         ┌─────────────────────────────────────────────────┐
         │                                                 v
   ┌─────┴───────────┐                       ┌─────────────────────────────────┐
-  │    Isaac Sim    │                       │        ACT + critic head        │
+       Isaac Sim    │                       │        ACT + critic head        │
   │  lift the cube  │                       │       ACT weights frozen        │
   │ 50 steps / sec  │                       │      one pass, two outputs      │
   └─────┬───────────┘                       └───────┬───────────────────┬─────┘
@@ -91,51 +107,147 @@ Scored by [src/scripts/measure_critic.py](src/scripts/measure_critic.py)
 ```
                           ┌─ critic head ───────────────────────────┐
   4 frames x 100 tokens   │                                         │
-  (512) ─────────────────>┼- - - - ->  Linear 512 -> 128            │
+  (512) ─────────────────>┼- - - - -> nn.Linear 512 -> 128 *        │
                           │                    │                    │
                           │               dropout 0.1               │
                           │                    │                    │
-                          │            ABMIL, per frame             │
+                          │         ┌──────────┬─────────┐          │
+                          │         │ ABMIL x 4 frames * │          │
+                          │         └──────────┴─────────┘          │
                           │                    │                    │
-                          │          4 x 128 concatenated           │
+                          │       4 frames x 128 concatenated       │
                           │                    │                    │
   TCE + ACM ─────────────>┼- - - - ->  + TCE + ACM = 514            │
                           │                    │                    │
-                          │             Linear 514 -> 1             │
+                          │          nn.Linear 514 -> 1 *           │
                           │                    │                    │
                           │                 sigmoid                 │
                           └────────────────────┬────────────────────┘
                                                v
                                          failure_score
+
+  * trained in PyTorch.
+
+  sigmoid(x) = 1 / (1 + e^-x)
 ```
 
 The tokens go through the whole stack; TCE and ACM skip it and join just before the score.
 
+---
+
+## ABMIL, per frame (attention-based multiple instance learning)
+
+Gated attention pooling from [Ilse et al., ICML 2018](https://arxiv.org/abs/1802.04712), eq. 9. Ours matches it step for step.
+
+Pooling blends 100 tokens into 1.
+
+| | how each token is weighted |
+|---|---|
+| mean pooling | 1/100, fixed |
+| max pooling | strongest wins, rest discarded |
+| attention pooling | learned |
+
+ABMIL is attention pooling, with a gate.
+
 ```
-  ABMIL — how much does each token matter
+                                           1 of 4 frames, 100 tokens x 128
+                                                          │
+                                                          │
+                                                          v
+      ┌─ ABMIL, per frame ────────────────────────────────┬───────────────────────────────────────────────────┐
+      │                                                   │                                                   │
+      │                            PAPER                  │                  OURS                             │
+      │                                                   h                                                   │
+      │                                                   │                                                   │
+      │                                        ┌──────────┴────────────┐                                      │
+      │                                        │ 100 tokens x 128  ∈ ℝ │                                      │
+      │                                        └──────────┬────────────┘                                      │
+      │   ┌───────────────────────────────────────────────┤                                                   │
+      │   │                                               v                                                   │
+      │   │                  * tanh(V h)          * SCORE THE TOKEN          * torch.tanh(nn.Linear(t))       │
+      │   │                       ⊙                       ⊙                                ⊙                │
+      │   │                  * sigm(U h)              * GATE IT              * torch.sigmoid(nn.Linear(t))    │
+      │   │                                               │                                                   │
+      │   │                                 ┌─────────────┴───────────────┐                                   │
+      │   │                                 │ 100 tokens x 128  ∈ [-1, 1] │                                   │
+      │   │                                 │              ⊙              │                                   │
+      │   │                                 │ 100 tokens x 128  ∈ [0, 1]  │                                   │
+      │   │                                 └─────────────┬───────────────┘                                   │
+      │   │                                               v                                                   │
+      │   │                                 ┌─────────────┴───────────────┐                                   │
+      │   │                                 │ 100 tokens x 128  ∈ [-1, 1] │                                   │
+      │   │                                 └─────────────┬───────────────┘                                   │
+      │   │                                               │                                                   │
+      │   │                                               v                                                   │
+      │   │                     * w^T(.)           * TO ONE NUMBER           * nn.Linear(gated)               │
+      │   │                                               │                                                   │
+      │   │                                     ┌─────────┴───────────┐                                       │
+      │   │                                     │ 100 tokens x 1  ∈ ℝ │                                       │
+      │   │                                     └─────────┬───────────┘                                       │
+      │   │                                               │                                                   │
+      │   │                                               v                                                   │
+      │   │                      softmax              NORMALIZE              torch.softmax(dim=-1)            │
+      │   │                                               │                                                   │
+      │   │                           ┌───────────────────┴────────────────────┐                              │
+      │   │                           │ 100 tokens x 1  ∈ [0, 1], summing to 1 │                              │
+      │   │                           └───────────────────┬────────────────────┘                              │
+      │   └────────────────────── h ──────────────────────┤                                                   │
+      │                                                   v                                                   │
+      │                      z = Σ aₖ hₖ                BLEND                torch.einsum("bn,bnd->bd")       │
+      │                                                   │                                                   │
+      │                                         ┌─────────┴──────────┐                                        │
+      │                                         │ 1 token x 128  ∈ ℝ │                                        │
+      │                                         └─────────┬──────────┘                                        │
+      │                                                   │                                                   │
+      └───────────────────────────────────────────────────┬───────────────────────────────────────────────────┘
+                                                          │
+                                                          v
+                                                    pooled (128)
 
-    token 1    ──>  0.5%   ┐
-    token 2    ──>  0.3%   │
-       ...                 ├──> blend by weight ──> pooled (128)
-    token 47   ──>   62%   │
-    token 48   ──>   30%   │
-    token 100  ──>  0.1%   ┘
+    * trained in PyTorch
 
-    47 is the gripper, 48 the cube.  An average gives all 100 an equal 1%.
+      sigmoid(x) = 1 / (1 + e^-x)
 
-    scoring one token:
-        ──> tanh(V·) ─┐
-                      ⊙ ──> one number, then softmax over 100
-        ──> sigm(U·) ─┘
-            the gate
+      softmax(s)ᵢ = e^sᵢ / Σ e^sⱼ
 ```
+
+The learned weights, measured on held-out rollouts:
+
+| token | weight | |
+|---|---|---|
+| 96 | 1.44% | table camera, highest |
+| 97 | 1.41% | |
+| 2 | 1.01% | |
+| 35 | 0.69% | wrist camera, lowest |
+
+An even split is 1.00%; the top ten hold 13.2% where an average gives 10%.
 
 ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
-summing to 1, and blends the tokens by them.
-Mean pooling is the same operation with every weight fixed at 1/100.
+summing to 1, and blends the tokens by them. Mean pooling is the same operation with every weight fixed at
+1/100.
+
+`tanh` squeezes a number to between -1 and +1. `sigmoid` squeezes it to between 0 and 1, which is what makes
+it a gate — near 0 shuts a dimension off, near 1 lets it through. `⊙` multiplies the two results position by
+position, and `softmax` turns the 100 scores into percentages adding to 100%.
 
 ---
 
+## Worklog
+
 The full build, phase by phase: [docs/worklog.md](docs/worklog.md).
 
-See [docs/stack.md](docs/stack.md) for versions and hardware.
+---
+
+## Stack
+
+Versions and hardware: [docs/stack.md](docs/stack.md).
+
+---
+
+## Run It
+
+```bash
+LIVESTREAM=1 PUBLIC_IP=<lan-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh src/scripts/eval_critic.py --model 20k --enable_cameras
+```
+
+Streams to a WebRTC client. `--model` picks the policy to run the head against.
