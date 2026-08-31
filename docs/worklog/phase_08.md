@@ -1,6 +1,6 @@
 # Phase 08 — Failure Data
 
-Roll out a fallible checkpoint and keep both outcomes. This is what the failure head trains on.
+Roll out a fallible checkpoint and keep both outcomes.
 
 ## 1. Record
 
@@ -10,26 +10,22 @@ LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isa
   --record --dataset_root datasets/rollouts-20k --repo_id bjahoor/lift-cube-rollouts-20k --overwrite
 ```
 
-20k because it fails often enough to be interesting and succeeds often enough to be a policy. 8 envs, 8 minutes, peak
-6.4 GB of 8.
-
-100 episodes, 30721 frames.
+20k fails often enough to be interesting and succeeds often enough to be a policy. 8 envs, 8 minutes, peak 6.4 GB of 8.
 
 | | Episodes | Frames |
 |---|---|---|
 | Success | 58 | 9760 |
 | Failure | 42 | 20961 |
 
-The episode ratio inverts at frame level: failures run to the 500-step giveup, successes finish in ~150. The head
-trains per frame.
+The ratio inverts at frame level — failures run to the 500-step giveup, successes finish in ~150 — and the head trains
+per frame.
 
-All 42 failures are timeouts, none dropped the cube. So a failure here is "reached, tried, never got there", and late
-in such an episode the cube is visibly still on the table — a head could learn "late = failure" and beat the metric
-while being useless. Earliness is the real result.
+All 42 failures are timeouts, none dropped the cube. Late in such an episode the cube is visibly still on the table, so
+a head can learn "late equals failure" and beat the metric while being useless. Earliness is the real result.
 
 ## 2. Push
 
-Two repos. The chunks live outside the dataset directory, so they go up separately.
+Chunks live outside the dataset directory, so they go up separately.
 
 ```bash
 .venv-lerobot/bin/python scripts/push_dataset.py \
