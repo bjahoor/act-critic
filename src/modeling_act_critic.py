@@ -110,6 +110,7 @@ class ACTWithCritic(ACTPolicy):
         # the encoder's output is computed once and handed only to the decoder, so it is
         # taken with a hook rather than by reimplementing ACT.forward
         self._tokens: Tensor | None = None
+        self._fresh = False
         self.model.encoder.register_forward_hook(self._capture)
         self._history: deque[Tensor] = deque(maxlen=max(HISTORY_OFFSETS) + 1)
 
@@ -121,27 +122,37 @@ class ACTWithCritic(ACTPolicy):
     def _capture(self, _module, _inputs, output: Tensor) -> None:
         # ACT works in (sequence, batch, dim); everything downstream here is batch-first
         self._tokens = output.detach().transpose(0, 1)
+        self._fresh = True
 
     def reset(self) -> None:
         super().reset()
         # ACTPolicy.__init__ calls reset() before this subclass has built its buffers
         if hasattr(self, "_history"):
             self._history.clear()
+            self._fresh = False
 
     @torch.no_grad()
-    def critic_score(self, batch: dict[str, Tensor], tce: Tensor, acm: Tensor) -> dict[str, Tensor] | None:
+    def critic_score(self, batch: dict[str, Tensor], tce: Tensor, acm: Tensor,
+                     chunk: Tensor | None = None) -> dict[str, Tensor] | None:
         """Score the current frame, and return the action chunk it was scored from.
 
         The encoder must run on every frame. `select_action` only runs it every
         `n_action_steps` — 10 for this checkpoint — so relying on whatever the hook last
-        caught gives a history of 2 distinct frames where training used 4, silently. This
-        calls the trunk itself, and hands back the chunk so the caller can take TCE and ACM
-        from it rather than paying for a second pass.
+        caught gives a history of 2 distinct frames where training used 4, silently.
+
+        A caller that already ran `predict_action_chunk` this frame — to compute TCE and ACM
+        from the chunk — passes it in and the trunk runs once rather than twice. Passing a
+        stale chunk raises rather than quietly scoring duplicated history.
 
         Returns None until the history fills, 0.3 s into an episode. Padding with copies of
         the first frame would invent stillness exactly where the approach is decided.
         """
-        chunk = self.predict_action_chunk(batch)
+        if chunk is None:
+            chunk = self.predict_action_chunk(batch)
+        elif not self._fresh:
+            raise RuntimeError("chunk passed but the encoder has not run since the last "
+                               "critic_score; call predict_action_chunk on this frame first")
+        self._fresh = False
         self._history.append(self._tokens)
         if len(self._history) <= max(HISTORY_OFFSETS):
             return None

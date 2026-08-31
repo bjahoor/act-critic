@@ -329,6 +329,9 @@ def main():
                     one,
                     torch.tensor([[tce]], dtype=torch.float32, device=device),
                     torch.tensor([[acm]], dtype=torch.float32, device=device),
+                    # the chunk above already ran the trunk this frame; without this
+                    # critic_score runs it a second time
+                    chunk=chunk,
                 )
                 # None until the head's four-frame history fills, 0.3 s in
                 if out is not None:
