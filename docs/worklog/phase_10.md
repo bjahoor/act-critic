@@ -37,7 +37,8 @@ the trunk is absent rather than merely frozen. `ACTWithCritic` is the deployed p
                                                                failure_score
 ```
 
-ABMIL scores every token, softmaxes the scores into weights summing to 1, and blends the tokens by them.
+ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
+summing to 1, and blends the tokens by them.
 Mean pooling is the same operation with every weight fixed at 1/100.
 
 The score comes from two branches — `tanh(V)` for what is in the token, `sigmoid(U)` as a gate — multiplied

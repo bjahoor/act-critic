@@ -74,12 +74,14 @@ scorer is a linear layer either way.
 | mean-pool + MLP | 0.066 M | control |
 | **ABMIL gated attention** | **0.033 M** | **picked** |
 | 1-query cross-attention | 0.066 M | |
-| CLAM | more | ABMIL plus a loss over pseudo-labelled patches |
+| CLAM | more | ABMIL plus a loss over pseudo-labelled tokens |
 
-ABMIL scores each patch and takes a weighted sum. Cross-attention would judge patches against each other,
-but the encoder's 4 self-attention layers already did that, so it pays double to redo the frozen trunk's work.
-CLAM's extra loss answers attention spreading thin across 10k tiles; there are 100 here. It is the fix if
-attention collapses onto one or two patches.
+ABMIL — attention-based multiple instance learning — scores each token and takes a weighted sum.
+Cross-attention would judge tokens against each other, but the encoder's 4 self-attention layers already did
+that, so it pays double to redo the frozen trunk's work.
+
+CLAM's extra loss answers attention spreading thin across 10k tiles; there are 100 tokens here. It is the fix
+if attention collapses onto one or two tokens.
 
 Mean-pool is a control, not a strawman — attentive probing only clearly beats pooling in few-shot settings.
 If it ties, attention did not earn its place.

@@ -53,7 +53,8 @@ the policy's own perception rather than guessing at it from the outside.
                                                                failure_score
 ```
 
-ABMIL scores every token, softmaxes the scores into weights summing to 1, and blends the tokens by them.
+ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
+summing to 1, and blends the tokens by them.
 Mean pooling is the same operation with every weight fixed at 1/100.
 
 See [docs/stack.md](docs/stack.md) for versions and hardware.
