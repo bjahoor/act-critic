@@ -47,7 +47,7 @@ What happens on every step at runtime.
         ┌─────────────────────────────────────────────────┐
         │                                                 v
   ┌─────┴───────────┐                       ┌─────────────────────────────────┐
-       Isaac Sim    │                       │        ACT + critic head        │
+  │    Isaac Sim    │                       │        ACT + critic head        │
   │  lift the cube  │                       │       ACT weights frozen        │
   │ 50 steps / sec  │                       │      one pass, two outputs      │
   └─────┬───────────┘                       └───────┬───────────────────┬─────┘
