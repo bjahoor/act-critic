@@ -14,7 +14,10 @@ from isaaclab.app import AppLauncher
 
 # the published checkpoints. the v1 run is discarded, see phase 06
 CHECKPOINTS = {
-    "25k": "bjahoor/act-lift-cube-franka-v2-25k",
+    "10k": "bjahoor/act-lift-cube-franka-v2-10k",
+    "20k": "bjahoor/act-lift-cube-franka-v2-20k",
+    "30k": "bjahoor/act-lift-cube-franka-v2-30k",
+    "40k": "bjahoor/act-lift-cube-franka-v2-40k",
     "50k": "bjahoor/act-lift-cube-franka-v2",
 }
 
@@ -237,7 +240,11 @@ def main():
             actions = torch.zeros_like(joint_pos)
             chunk = [None] * env.unwrapped.num_envs
             for env_id, policy in enumerate(policies):
-                one = {k: (v[env_id : env_id + 1] if torch.is_tensor(v) else v[:1]) for k, v in batch.items()}
+                # some pipeline entries are None, and task is a plain list
+                one = {
+                    k: v[env_id : env_id + 1] if torch.is_tensor(v) else (v[:1] if isinstance(v, list) else v)
+                    for k, v in batch.items()
+                }
                 # select_action only predicts every n_action_steps, TCE needs one per step
                 if recorder is not None:
                     chunk[env_id] = postprocessor(policy.predict_action_chunk(one))[0]

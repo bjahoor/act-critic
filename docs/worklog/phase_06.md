@@ -28,9 +28,9 @@ hf jobs run -d --flavor rtx-pro-6000 --timeout 4h --name act-lift-cube-v2 \
     --policy.push_to_hub=true \
     --policy.repo_id=bjahoor/act-lift-cube-franka-v2 \
     --steps=50000 --batch_size=8 --num_workers=16 \
-    --save_freq=25000 --log_freq=500 \
+    --save_freq=10000 --log_freq=500 \
     --wandb.enable=false \
-    --output_dir=/out/v2-run1 --job_name=act_lift_cube_v2
+    --output_dir=/out/v2-run2 --job_name=act_lift_cube_v2
 ```
 
 `n_action_steps=10` so chunks overlap — TCE needs it. `pyav` because the image has no ffmpeg and torchcodec will not
@@ -41,19 +41,34 @@ shared memory and the dataloader dies at startup.
 
 ## 3. Publish checkpoints
 
-Only the final model is pushed automatically. The 25k checkpoint sits in the bucket — pull it down and upload it as
-its own repo. `training_state/` is optimizer state for resuming — skip it. Bucket-to-repo copy is unsupported, so it
-goes via disk.
+lerobot pushes only the final model, and only after the last step (`lerobot_train.py:534`, after the loop). The
+10k-40k checkpoints are written to the bucket as they happen, so publish them from here instead of waiting:
 
 ```bash
-hf buckets sync hf://buckets/bjahoor/act-runs/v2-run1/checkpoints/025000/pretrained_model ./ckpt-25k
-hf upload bjahoor/act-lift-cube-franka-v2-25k ./ckpt-25k
+for S in 010000 020000 030000 040000; do
+  L=$((10#$S / 1000))k
+  hf buckets sync hf://buckets/bjahoor/act-runs/v2-run2/checkpoints/$S/pretrained_model ./ckpt-$L
+  hf upload bjahoor/act-lift-cube-franka-v2-$L ./ckpt-$L
+done
 ```
+
+Each checkpoint dir is a complete inference package. `training_state/` is optimizer state for resuming — skip it.
+Bucket-to-repo copy is unsupported, so it goes via disk. Run this on a poll during training and each model is usable
+about a minute after it is written, rather than an hour later.
 
 ## 4. Result
 
-Discarded, see below. Rollout success at 100k was 16% over 25 rollouts; 25k and 50k were 5 rollouts each and too few
-to rank.
+50k steps in 51m, $2.32. Final loss 0.078, grad norm 108 -> 5.8.
+
+| checkpoint | model |
+|---|---|
+| 10k | https://huggingface.co/bjahoor/act-lift-cube-franka-v2-10k |
+| 20k | https://huggingface.co/bjahoor/act-lift-cube-franka-v2-20k |
+| 30k | https://huggingface.co/bjahoor/act-lift-cube-franka-v2-30k |
+| 40k | https://huggingface.co/bjahoor/act-lift-cube-franka-v2-40k |
+| 50k | https://huggingface.co/bjahoor/act-lift-cube-franka-v2 |
+
+Success rate: TBD.
 
 ## 5. Discarded run
 
@@ -64,14 +79,7 @@ in the demo data, neither in training:
   of deciding. Across a 500-step rollout the predicted finger target never left 0.0398-0.0404. It never closed.
 - The goal pose was randomized per episode and never given to the policy, so the task was not learnable.
 
-Rollout success was 16% at 100k. The run had never been rollout-tested until after all four checkpoints existed —
-that is how both bugs survived training. Test one checkpoint in the env before spending on a full run.
-
-## 6. Retrain
-
-`bjahoor/lift-cube-franka-v2`, same recipe with `--steps=50000`. `num_workers=16`: 32 crashes at startup on this
-flavour — 23 vCPU and `/dev/shm` too small for the workers' buffers — and the loader was never the bottleneck.
-
-Publishes to `bjahoor/act-lift-cube-franka-v2` and `-v2-25k`. The v1 repos stay up.
-
-Success rate: TBD.
+Rollout success was 16% at 100k over 25 rollouts; the 25k and 50k checkpoints got 5 rollouts each, too few to rank.
+Nothing had been rollout-tested until after all four checkpoints existed — that is how both bugs survived training.
+Test one checkpoint in the env before spending on a full run. The v1 repos stay up as a record; they take a 9-dim
+`observation.state` and will not load against v2 data.
