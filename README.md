@@ -11,7 +11,7 @@ the policy's own perception rather than guessing at it from the outside.
 
 ## Critic Head
 
-ACT's architecture, modified to include the critic head, branching off the encoder.
+ACT's architecture with the critic head added, branching off the transformer encoder's output.
 
 [src/modeling_act_critic.py](src/modeling_act_critic.py)
 
