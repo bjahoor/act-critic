@@ -14,6 +14,6 @@
 
 | Where | Role |
 |---|---|
-| RTX 3060 Ti, 8 GB | Isaac Sim |
+| RTX 3060 Ti, 8 GB | Isaac Sim, ACT inference, critic head training |
 | HF Jobs | ACT training |
-| RTX 3060, 12 GB | Inference |
+| RTX 3060, 12 GB | Not used |
