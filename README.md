@@ -9,8 +9,7 @@ the policy's own perception rather than guessing at it from the outside.
 
 ## Critic head
 
-ACT with a second output path. The head branches off the encoder and scores the same forward pass — no second
-model. The trunk is frozen, so the action chunk is bit-identical with the head attached or removed.
+ACT's architecture, modified to include the critic head, branching off the encoder.
 
 [src/modeling_act_critic.py](src/modeling_act_critic.py)
 
