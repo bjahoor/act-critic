@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from modeling.act_critic import CriticHead  # noqa: E402
+from modeling.act_critic import HEAD_REPO, CriticHead, load_head  # noqa: E402
 from scripts.train_critic import CachedFrames, cache_path  # noqa: E402
 
 TOP, LOW = {96, 97, 98}, {33, 34, 35}
@@ -107,7 +107,7 @@ def draw(w: np.ndarray, frames: int, out: Path) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--head", default="checkpoints/critic-abmil/critic.pt")
+    p.add_argument("--head", default=HEAD_REPO, help="local .pt, or a hub repo id")
     p.add_argument("--dataset", default="bjahoor/lift-cube-rollouts-10k", help="unseen set")
     p.add_argument("--cache-dir", default="datasets/critic-cache")
     p.add_argument("--out", type=Path, default=Path("docs/images/attention_grid.png"))
@@ -115,7 +115,7 @@ def main() -> None:
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = p.parse_args()
 
-    saved = torch.load(args.head, map_location=args.device, weights_only=False)
+    saved = load_head(args.head, args.device)
     if args.dataset == saved["train_dataset"]:
         print(f"[warn] {args.dataset} is what the head trained on; weights will flatter it")
     head = CriticHead(pooling=saved["pooling"]).to(args.device).eval()

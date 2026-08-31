@@ -255,4 +255,5 @@ Versions and hardware: [docs/stack.md](docs/stack.md).
 LIVESTREAM=1 PUBLIC_IP=<lan-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh src/scripts/eval_critic.py --model 20k --enable_cameras
 ```
 
-Streams to a WebRTC client. `--model` picks the policy to run the head against.
+Streams to a WebRTC client. `--model` picks the policy to run the head against. The
+critic head downloads itself from [the Hub](https://huggingface.co/bjahoor/act-critic-head).

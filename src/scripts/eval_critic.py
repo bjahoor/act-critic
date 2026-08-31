@@ -42,7 +42,7 @@ ALARM_HOLD_STEPS = 25
 
 parser = argparse.ArgumentParser(description="Roll out ACT with the critic head and display the score.")
 parser.add_argument("--model", type=str, default="20k", choices=list(CHECKPOINTS), help="Which trained checkpoint to roll out.")
-parser.add_argument("--critic", type=str, default="checkpoints/critic-abmil/critic.pt", help="Trained head. Untrained if absent.")
+parser.add_argument("--critic", type=str, default=HEAD_REPO, help="Trained head: local .pt, or a hub repo id.")
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
@@ -80,7 +80,7 @@ from huggingface_hub import snapshot_download
 from lerobot.policies.factory import make_pre_post_processors
 from safetensors.torch import load_file
 
-from modeling.act_critic import HISTORY_OFFSETS, ACTWithCritic
+from modeling.act_critic import HEAD_REPO, HISTORY_OFFSETS, ACTWithCritic, load_head
 from recording.lerobot_recorder import TASK
 
 # give up on an episode after this many steps. the expert finished in ~150, ACT is slower
@@ -274,15 +274,18 @@ def main():
     # the head and the scaler its TCE and ACM were standardized with, saved together by
     # train_critic. absent, the head is random and the readout is noise, which is still
     # enough to check the display itself
-    critic_path = Path(args_cli.critic)
-    trained = critic_path.is_file()
+    try:
+        saved = load_head(args_cli.critic, "cpu")
+        trained = True
+    except Exception as exc:                      # no local file and no network
+        print(f"[WARN] could not load {args_cli.critic}: {exc}", flush=True)
+        trained = False
     if trained:
-        saved = torch.load(critic_path, map_location="cpu", weights_only=False)
         scale, pooling = saved["scale"], saved["pooling"]
         if saved["base"] != checkpoint:
             print(f"[WARN] head was trained on {saved['base']}, rolling out {checkpoint}", flush=True)
     else:
-        print(f"[WARN] {critic_path} not found, the head is untrained and the score is noise", flush=True)
+        print("[WARN] the head is untrained and the score is noise", flush=True)
         scale = {"tce_mean": 0.0, "tce_std": 1.0, "acm_mean": 0.0, "acm_std": 1.0}
         pooling = "abmil"
 

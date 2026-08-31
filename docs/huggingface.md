@@ -23,3 +23,4 @@ Every Hub repo this project reads or writes.
 | [bjahoor/act-lift-cube-franka-v2-30k](https://huggingface.co/bjahoor/act-lift-cube-franka-v2-30k) | ACT checkpoint, 30k steps |
 | [bjahoor/act-lift-cube-franka-v2-40k](https://huggingface.co/bjahoor/act-lift-cube-franka-v2-40k) | ACT checkpoint, 40k steps |
 | [bjahoor/act-lift-cube-franka-v2](https://huggingface.co/bjahoor/act-lift-cube-franka-v2) | ACT checkpoint, 50k steps, final |
+| [bjahoor/act-critic-head](https://huggingface.co/bjahoor/act-critic-head) | The trained critic head. What the scripts download by default |

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import torch
 
-from modeling.act_critic import HISTORY_OFFSETS, CriticHead
+from modeling.act_critic import HEAD_REPO, HISTORY_OFFSETS, CriticHead, load_head
 from train_critic import CachedFrames, average_precision, build_cache, cache_path
 
 FPS = 50
@@ -101,7 +101,7 @@ def report(name: str, rows: list[dict]) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--dataset", default="bjahoor/lift-cube-rollouts-10k", help="held-out set to score")
-    p.add_argument("--head", default="checkpoints/critic-abmil/critic.pt")
+    p.add_argument("--head", default=HEAD_REPO, help="local .pt, or a hub repo id")
     # default is the trunk the head was trained against: unseen episodes, same perception.
     # pointing this at the checkpoint that generated the rollouts instead asks the harder
     # question, whether the head survives a different policy's feature space
@@ -111,7 +111,7 @@ def main() -> None:
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = p.parse_args()
 
-    saved = torch.load(args.head, map_location=args.device, weights_only=False)
+    saved = load_head(args.head, args.device)
     if tuple(saved["history_offsets"]) != HISTORY_OFFSETS:
         raise SystemExit(f"head was trained with offsets {saved['history_offsets']}, code has {HISTORY_OFFSETS}")
     head = CriticHead(pooling=saved["pooling"]).to(args.device)

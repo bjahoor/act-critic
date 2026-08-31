@@ -28,3 +28,14 @@ the cube is visibly still on the table at step 400 scores exactly this.
 
 Cache build 200 episodes, ~3 min. Training, ~7 s an epoch. The GPU is idle most of that —
 the head is 0.1M parameters and the data path is the constraint, not the 3060 Ti.
+
+## 4. Publishing it
+
+The head is 392 KB — small, but weights do not belong in the source tree.
+
+```bash
+.venv-lerobot/bin/hf upload bjahoor/act-critic-head checkpoints/critic-abmil/critic.pt critic.pt
+```
+
+`--head` and `--critic` take either a local `.pt` or a hub repo id, and default to the repo,
+so a fresh clone runs with nothing downloaded by hand.

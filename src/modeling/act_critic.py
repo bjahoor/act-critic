@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from collections import deque
 
+from pathlib import Path
+
 import torch
 from torch import Tensor, nn
 
@@ -158,3 +160,20 @@ class ACTWithCritic(ACTPolicy):
             return None
         tokens = torch.stack([self._history[-1 - k] for k in HISTORY_OFFSETS], dim=1)
         return {**self.critic(tokens, tce, acm), "action_chunk": chunk}
+
+
+HEAD_REPO = "bjahoor/act-critic-head"
+
+
+def load_head(where: str = HEAD_REPO, device: str = "cpu") -> dict:
+    """The trained head, from a local file or the Hub.
+
+    `where` is a path if it exists on disk, otherwise a Hub repo id. Defaults to the Hub so a
+    fresh clone runs without downloading anything by hand.
+    """
+    path = Path(where)
+    if not path.exists():
+        from huggingface_hub import hf_hub_download
+
+        path = Path(hf_hub_download(where, "critic.pt"))
+    return torch.load(path, map_location=device, weights_only=False)
