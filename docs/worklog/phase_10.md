@@ -4,28 +4,49 @@
 
 ## 1. Reaching the encoder output
 
-`ACT.forward` computes the encoder output at
-[modeling_act.py:491](../../.venv-lerobot/lib/python3.11/site-packages/lerobot/policies/act/modeling_act.py)
-and hands it straight to the decoder. It is never returned.
+The encoder output is handed straight to the decoder and never returned. A forward hook on `model.encoder`
+takes a copy as it passes, so LeRobot's file stays untouched and upgrades do not fork. `vae_encoder` is a
+separate instance, so the hook catches only the right one.
 
-A forward hook on `model.encoder` takes a copy as it passes, in three lines, rather than reimplementing
-`ACT.forward` to return it. LeRobot's file is untouched, so the checkpoint keeps loading and upgrades do not
-fork. `vae_encoder` is a separate `ACTEncoder` instance, so hooking `encoder` catches only the right one.
+## 2. Two classes
 
-ACT works in `(sequence, batch, dim)`; the head is batch-first. The hook transposes and detaches at the tap.
+`CriticHead` takes tokens as an argument and knows nothing about ACT — training feeds it cached output, so
+the trunk is absent rather than merely frozen. `ACTWithCritic` is the deployed pair.
 
-## 2. Two classes, because they run in different places
+## 3. The head
 
-`CriticHead` takes tokens as an argument and knows nothing about ACT. Training feeds it cached encoder output,
-so the trunk is not merely frozen during training — it is absent.
+```
+  ABMIL — how much does each token matter               the head, end to end
 
-`ACTWithCritic` subclasses `ACTPolicy` and is the deployed pair. `select_action` and `predict_action_chunk`
-are inherited untouched.
+    token 1    ──>  0.5%  ┐                             4 frames x 100 tokens (512)
+    token 2    ──>  0.3%  │                                          │
+       ...                ├──> blend by weight                Linear 512 -> 128
+    token 47   ──>   62%  │         │                                │
+    token 48   ──>   30%  │         v                             dropout 0.1
+    token 100  ──>  0.1%  ┘    pooled (128)                          │
+                                                              ABMIL, per frame
+    47 is the gripper, 48 the cube.                                  │
+    An average gives all 100 an equal 1%.                 4 x 128 concatenated
+                                                                     │
+    scoring one token:                                    + TCE + ACM  = 514
+        ──> tanh(V·) ─┐                                              │
+                      ⊙ ──> one number                        Linear 514 -> 1
+        ──> sigm(U·) ─┘  then softmax over 100                       │
+            the gate                                               sigmoid
+                                                                     │
+                                                               failure_score
+```
 
-## 3. Frozen, and shown to be
+ABMIL scores every token, softmaxes the scores into weights summing to 1, and blends the tokens by them.
+Mean pooling is the same operation with every weight fixed at 1/100.
 
-`freeze_trunk()` clears `requires_grad` on everything outside `critic.`, and the hook detaches. Measured on
-`bjahoor/act-lift-cube-franka-v2-20k`:
+The score comes from two branches — `tanh(V)` for what is in the token, `sigmoid(U)` as a gate — multiplied
+together. The gate is what makes it *gated*: `tanh` alone is near-linear around zero and cannot suppress a
+dimension outright.
+
+Frames are pooled separately and concatenated, so the ordering survives.
+
+## 4. Frozen, and shown to be
 
 | | |
 |---|---|
@@ -34,27 +55,18 @@ are inherited untouched.
 | trunk after 20 head steps | bit-identical |
 | action chunk after 20 head steps | bit-identical |
 
-The last two are the claim worth making, so they are checked by comparing every trunk tensor before and after
-training the head, not asserted.
+The last two are the claim worth making, so they are checked tensor by tensor rather than asserted.
 
-## 4. Bug
+## 5. Bug
 
-`ACTPolicy.__init__` calls `self.reset()` on its last line. The override clears the history buffer, which the
-subclass has not created yet, so construction died before the checkpoint ever loaded. `reset()` guards on
-`hasattr`.
+`ACTPolicy.__init__` calls `reset()` on its last line, before the subclass has built its history buffer.
+Construction died before the checkpoint ever loaded. `reset()` guards on `hasattr`.
 
-## 5. History gate
+## 6. Two choices in the code
 
-Four frames at 0, 5, 10 and 15 back is 0.3 s at 50 fps. Until the buffer fills, `critic_score` returns None
-rather than padding with copies of the first frame — padding would invent stillness at exactly the point the
-approach is being decided.
+Until the history fills, `critic_score` returns None rather than padding with copies of the first frame —
+padding would invent stillness exactly where the approach is being decided. Costs the first 0.3 s of an
+episode; the failure is decided around 1.0-1.8 s.
 
-Cost: no score for the first 0.3 s of an episode. The failure is decided around 1.0-1.8 s, so nothing is lost.
-
-## 6. Attention is returned
-
-`GatedAttentionPool` returns its per-token weights alongside the pooled vector. Drawn over the wrist image
-they say what the head learned to watch: the gripper and cube, or a corner of the table. Free, since the
-weights are already computed.
-
-`pooling="mean"` swaps in the control, 0.066M against 0.099M, everything else identical.
+`GatedAttentionPool` returns its per-token weights. Drawn over the wrist image they say whether the head
+learned to watch the gripper or a corner of the table. Free, since they are already computed.
