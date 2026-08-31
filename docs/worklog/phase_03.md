@@ -19,7 +19,8 @@ echo .venv-lerobot >> .gitignore
 ## 2. Running
 
 ```bash
-PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh scripts/collect_demos.py --enable_cameras --headless
+PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
+  src/scripts/collect_demos.py --enable_cameras --headless
 ```
 
 `python.sh` puts Isaac's paths ahead of the venv's, so Isaac wins on numpy and torch while lerobot stays importable.

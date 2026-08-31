@@ -39,7 +39,7 @@ Eval must override the robot to `FRANKA_PANDA_HIGH_PD_CFG`, which `IK-Abs` sets 
 
 ## 2. Recorder
 
-`scripts/lerobot_recorder.py`. No Isaac imports, runs from the venv in [phase 03](phase_03.md).
+`src/recording/lerobot_recorder.py`. No Isaac imports, runs from the venv in [phase 03](phase_03.md).
 
 Buffers frames per env, writes only successes. Two 200x200 videos, a 9-vector state and action, 50 fps.
 

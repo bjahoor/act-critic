@@ -1,13 +1,13 @@
 # Phase 02 — Record Demos
 
-Modify `scripts/collect_demos.py` to record 50 successful episodes with randomized cube positions.
+Modify `src/scripts/collect_demos.py` to record 50 successful episodes with randomized cube positions.
 
 ## 1. Copy the state machine into the repo
 
 Isaac Lab stays read-only, so the scripted expert is copied out to be modified here.
 
 ```bash
-cp ~/IsaacLab/scripts/environments/state_machine/lift_cube_sm.py scripts/collect_demos.py
+cp ~/IsaacLab/scripts/environments/state_machine/lift_cube_sm.py src/scripts/collect_demos.py
 ```
 
 BSD-3-Clause header kept. Records nothing yet.
@@ -15,7 +15,8 @@ BSD-3-Clause header kept. Records nothing yet.
 ## 2. Verify the copy still runs
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> ~/IsaacLab/isaaclab.sh -p scripts/collect_demos.py --num_envs 8
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONPATH=$PWD/src ~/IsaacLab/isaaclab.sh -p \
+  src/scripts/collect_demos.py --num_envs 8
 ```
 
 Same behaviour as the original before any changes are made.
@@ -47,7 +48,8 @@ The state machine itself is untouched.
 ## 5. Test
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> ~/IsaacLab/isaaclab.sh -p scripts/collect_demos.py --num_envs 4 --enable_cameras
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONPATH=$PWD/src ~/IsaacLab/isaaclab.sh -p \
+  src/scripts/collect_demos.py --num_envs 4 --enable_cameras
 ```
 
 Camera prims are visible in the streamed viewport. A temporary print of the observation shapes gave
@@ -74,12 +76,13 @@ would appear in the recorded camera images.
 env_cfg.commands.object_pose.debug_vis = False
 ```
 
-Set in `scripts/collect_demos.py`, not in Isaac Lab. The end-effector frame transformer already has `debug_vis=False`.
+Set in `src/scripts/collect_demos.py`, not in Isaac Lab. The end-effector frame transformer already has `debug_vis=False`.
 
 ## 8. Test
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> ~/IsaacLab/isaaclab.sh -p scripts/collect_demos.py --num_envs 4 --enable_cameras
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONPATH=$PWD/src ~/IsaacLab/isaaclab.sh -p \
+  src/scripts/collect_demos.py --num_envs 4 --enable_cameras
 ```
 
 Wider framing on both cameras, no axis triads in the scene.

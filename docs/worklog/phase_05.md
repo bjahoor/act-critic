@@ -3,8 +3,8 @@
 ## 1. Record
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/collect_demos.py --num_envs 10 --enable_cameras --record --num_demos 50 \
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
+  src/scripts/collect_demos.py --num_envs 10 --enable_cameras --record --num_demos 50 \
   --dataset_root datasets/lift-cube-franka-v2 --repo_id bjahoor/lift-cube-franka-v2 --overwrite
 ```
 
@@ -16,7 +16,7 @@ positions in the state. It trained, but the policy it produced could not grasp. 
 
 ## 2. Push to hub
 
-`scripts/push_dataset.py` refuses to run on:
+`src/scripts/push_dataset.py` refuses to run on:
 
 - a `--root` that is not a dataset
 - a truncated or unfinalized dataset
@@ -25,7 +25,7 @@ positions in the state. It trained, but the policy it produced could not grasp. 
 Uploads the whole directory, so keep stray files out.
 
 ```bash
-.venv-lerobot/bin/python scripts/push_dataset.py \
+.venv-lerobot/bin/python src/scripts/push_dataset.py \
   --repo_id bjahoor/lift-cube-franka-v2 --root datasets/lift-cube-franka-v2
 ```
 

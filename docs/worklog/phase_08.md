@@ -5,8 +5,8 @@ Roll out a fallible checkpoint and keep both outcomes.
 ## 1. Record
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 20k --num_envs 8 --num_rollouts 100 --enable_cameras \
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
+  src/scripts/eval_policy.py --model 20k --num_envs 8 --num_rollouts 100 --enable_cameras \
   --record --dataset_root datasets/rollouts-20k --repo_id bjahoor/lift-cube-rollouts-20k --overwrite
 ```
 
@@ -28,7 +28,7 @@ a head can learn "late equals failure" and beat the metric while being useless. 
 Chunks live outside the dataset directory, so they go up separately.
 
 ```bash
-.venv-lerobot/bin/python scripts/push_dataset.py \
+.venv-lerobot/bin/python src/scripts/push_dataset.py \
   --repo_id bjahoor/lift-cube-rollouts-20k --root datasets/rollouts-20k
 ```
 

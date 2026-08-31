@@ -7,6 +7,12 @@ trains on.
 
 """Launch Omniverse Toolkit first."""
 
+import sys
+from pathlib import Path
+
+# src/ on the path, so `recording` imports however this is launched
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import argparse
 import atexit
 
@@ -67,7 +73,7 @@ from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot.policies.factory import make_pre_post_processors
 
-from lerobot_recorder import DROPPED, SUCCESS, TASK, TIMEOUT, EpisodeRecorder
+from recording.lerobot_recorder import DROPPED, SUCCESS, TASK, TIMEOUT, EpisodeRecorder
 
 # give up on an episode after this many steps. the expert finished in ~150, ACT is slower
 MAX_EPISODE_STEPS = 500

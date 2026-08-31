@@ -3,7 +3,7 @@
 Measure a trained checkpoint's success rate, and write the labelled rollouts the failure head trains on.
 
 ```bash
-cp scripts/collect_demos.py scripts/eval_policy.py
+cp src/scripts/collect_demos.py src/scripts/eval_policy.py
 ```
 
 Everything below is a change to that copy, except step 1.
@@ -67,14 +67,14 @@ it — `push_dataset.py` uploads the whole directory.
 Success rate only.
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 50k --num_envs 4 --num_rollouts 50 --enable_cameras
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
+  src/scripts/eval_policy.py --model 50k --num_envs 4 --num_rollouts 50 --enable_cameras
 ```
 
 Rollouts for the head.
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 30k --num_envs 4 --num_rollouts 300 --enable_cameras \
+LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
+  src/scripts/eval_policy.py --model 30k --num_envs 4 --num_rollouts 300 --enable_cameras \
   --record --dataset_root datasets/rollouts --overwrite
 ```

@@ -11,12 +11,19 @@ implemented in the warp kernel `infer_state_machine` and runs on the GPU across 
 
 .. code-block:: bash
 
-    PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh scripts/collect_demos.py \
+    PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
+      src/scripts/collect_demos.py \
       --num_envs 10 --enable_cameras --record --num_demos 100 --overwrite
 
 """
 
 """Launch Omniverse Toolkit first."""
+
+import sys
+from pathlib import Path
+
+# src/ on the path, so `recording` imports however this is launched
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
 import atexit
@@ -64,7 +71,7 @@ from isaaclab_tasks.manager_based.manipulation.lift import mdp as lift_mdp
 from isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
-from lerobot_recorder import EpisodeRecorder
+from recording.lerobot_recorder import EpisodeRecorder
 
 # give up on an episode after this many steps
 MAX_EPISODE_STEPS = 500

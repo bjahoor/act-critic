@@ -2,7 +2,7 @@
 
 No Isaac imports — run with the venv python directly:
 
-    .venv-lerobot/bin/python scripts/push_dataset.py --repo_id bjahoor/lift-cube-franka
+    .venv-lerobot/bin/python src/scripts/push_dataset.py --repo_id bjahoor/lift-cube-franka
 """
 
 from __future__ import annotations
