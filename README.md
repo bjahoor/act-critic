@@ -9,9 +9,12 @@ the policy's own perception rather than guessing at it from the outside.
 
 ## Critic head
 
-LeRobot's ACT, unchanged, with the critic head branching off its encoder. Everything marked frozen is the
-published checkpoint — the head reads it and never writes to it, so the action chunk is bit-identical with
-the head attached or removed. Defined in [src/modeling_act_critic.py](src/modeling_act_critic.py).
+ACT with a second output path. The head branches off the encoder, reads the same scene tokens the decoder
+reads, and produces a failure score from the same forward pass — no second model, no second inference.
+
+The trunk is frozen by choice, not by limitation: the action chunk is bit-identical with the head attached or
+removed, so the policy that was measured is the policy that ships. Defined in
+[src/modeling_act_critic.py](src/modeling_act_critic.py).
 
 ```
   wrist ──┐
