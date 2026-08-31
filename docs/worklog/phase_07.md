@@ -1,6 +1,6 @@
 # Phase 07 — Eval Script
 
-Measure a trained checkpoint's success rate, and write the labelled rollouts the failure head trains on.
+Measure a trained checkpoint's success rate, and write the labelled rollouts the critic head trains on.
 
 ```bash
 cp src/scripts/collect_demos.py src/scripts/eval_policy.py

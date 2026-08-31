@@ -4,7 +4,7 @@ No code. Design only.
 
 ## 1. The idea
 
-ACT with a built-in failure head: one model, one forward pass, an action chunk and a live
+ACT with a built-in critic head: one model, one forward pass, an action chunk and a live
 `failure_score` together.
 
 Runtime failure detection is usually a second model watching the first. Inside the policy, it
