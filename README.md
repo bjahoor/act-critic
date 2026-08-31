@@ -75,7 +75,7 @@ Mean pooling is the same operation with every weight fixed at 1/100.
 
 ## Worklog
 
-| | | |
+| Phase | Title | What it covers |
 |---|---|---|
 | 00 | [Brainstorm](docs/worklog/phase_00.md) | The idea. One model, one forward pass, an action chunk and a failure score |
 | 01 | [Sim and Streaming Setup](docs/worklog/phase_01.md) | Isaac Lab running the lift task, streamed over WebRTC to a headless box |
