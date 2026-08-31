@@ -9,12 +9,10 @@ the policy's own perception rather than guessing at it from the outside.
 
 ## Critic head
 
-ACT with a second output path. The head branches off the encoder, reads the same scene tokens the decoder
-reads, and produces a failure score from the same forward pass — no second model, no second inference.
+ACT with a second output path. The head branches off the encoder and scores the same forward pass — no second
+model. The trunk is frozen, so the action chunk is bit-identical with the head attached or removed.
 
-The trunk is frozen by choice, not by limitation: the action chunk is bit-identical with the head attached or
-removed, so the policy that was measured is the policy that ships. Defined in
-[src/modeling_act_critic.py](src/modeling_act_critic.py).
+[src/modeling_act_critic.py](src/modeling_act_critic.py)
 
 ```
   wrist ──┐
