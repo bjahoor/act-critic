@@ -98,15 +98,17 @@ pathology. I found no use of it in robotics.
 | Head | ABMIL gated attention pooling, 512 -> 128, linear scorer |
 | Extra inputs | TCE and ACM, concatenated at the output |
 | Output | `failure_score`, 0-1 |
-| Train | all 200 rollouts on 20k |
-| Test | the earlier 100 on the same checkpoint, offline |
+| Train | `bjahoor/lift-cube-rollouts-20k-200`, 98 success / 102 failure |
+| Tune against | `bjahoor/lift-cube-rollouts-20k`, the earlier 100, offline |
+| Transfer test | `bjahoor/lift-cube-rollouts-10k`, a checkpoint the head never saw |
 | Labels | as recorded, episode-wide |
 | Imbalance | untouched |
+| Regularization | dropout 0.1, early stopping on held-out average precision |
 
 Beat: always-fail, frame index alone, TCE thresholded. Headline metric is earliness.
 
-Failures run to the 500-step giveup and successes finish in ~150, so failures are 69% of frames despite being
-42% of episodes. Left alone anyway: 2:1 is mild, thresholding beats reweighting for deep models, and the
+Failures run to the 500-step giveup and successes finish in ~150, so failures are 76% of frames despite being
+51% of episodes. Left alone anyway: 2:1 is mild, thresholding beats reweighting for deep models, and the
 threshold sweep is already being run to measure precision and recall. Class weighting is the fix if the head
 turns out to answer "failing" everywhere.
 
@@ -117,4 +119,14 @@ so it is a measurement and not an impression. The 10k set is a third test: a pol
 A label derived from `object_pos` would test the labelling rule rather than the head, so `object_pos` and
 `termination` are evaluation instruments only.
 
-Open: one frame or a short history, and regularization.
+Every failure across all three datasets is a timeout; there are no drops, because the drop check only fires
+when the cube leaves the table and this policy fails by missing the grasp. So the head is trained and
+evaluated on exactly one failure mode, a misaligned approach. Nothing here supports a claim of generality.
+
+The head sees four frames — now, 0.1 s, 0.2 s and 0.3 s back — so a descent toward the cube is
+distinguishable from one past it. Dropout is 0.1, matching ACT's own config rather than a number picked here.
+Early stopping watches average precision, not accuracy, which is gameable at 24/76.
+
+There is a concrete thing to overfit to: the cube position is randomized per episode and plainly visible, so
+the head could learn "cube at this spot failed" and never look at the gripper. The signature is a gap between
+training and held-out scores.
