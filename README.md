@@ -9,6 +9,10 @@ the policy's own perception rather than guessing at it from the outside.
 
 ## Critic head
 
+LeRobot's ACT, unchanged, with the critic head branching off its encoder. Everything marked frozen is the
+published checkpoint — the head reads it and never writes to it, so the action chunk is bit-identical with
+the head attached or removed. Defined in [src/modeling_act_critic.py](src/modeling_act_critic.py).
+
 ```
   wrist ──┐
           ├──> ResNet18 ──> 98 patches ──┐
@@ -30,6 +34,10 @@ the policy's own perception rather than guessing at it from the outside.
 ```
 
 ## Inside the critic head
+
+Inside that box. 100 scene tokens and two scalars in, one score out. Trained by
+[src/scripts/train_critic.py](src/scripts/train_critic.py) and scored by
+[src/scripts/measure_critic.py](src/scripts/measure_critic.py).
 
 ```
   ABMIL — how much does each token matter               the head, end to end
