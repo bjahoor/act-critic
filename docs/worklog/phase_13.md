@@ -1,57 +1,30 @@
-# Phase 13 — Live Score Display
+# Phase 13 — Training Run
 
-`src/scripts/eval_critic.py`. The demo: ACT running with the head attached, failure score on screen as it happens.
+First real run of the head. `--pooling abmil`, defaults otherwise.
 
-Copy of [phase 07](phase_07.md)'s eval loop. Same env, same task. Recording is dropped — `eval_policy.py` owns that.
+## 1. Result
 
-```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  src/scripts/eval_critic.py --model 20k --num_envs 4 --enable_cameras
-```
+200 episodes in, 64,300 frames. Stopped at epoch 11 on patience; best was epoch 6.
 
-## 1. The panel
+| | head | baseline |
+|---|---|---|
+| episode AP | **0.9914** | TCE alone 0.8292 |
+| frame AP | 0.9744 | frame index 0.9135 |
+| | | always-fail 0.4200 |
 
-A Kit window: one bar per env, plus a rolling chart of the last 200 steps.
+Loss fell 0.355 -> 0.106 while episode AP plateaued after epoch 6. That gap is the head
+starting to memorise, and early stopping is what kept the epoch-6 weights.
 
-| | |
-|---|---|
-| `omni.ui` | Isaac Sim's own toolkit, already installed |
-| `isaaclab.ui.widgets.LiveLinePlot` | Isaac Lab's rolling multi-series plot |
+## 2. What this number is not
 
-Both ship with the install. Nothing added.
+The tune set is what early stopping selected on, so 0.9914 is a selection score, not a
+held-out one. Two clean measurements are still outstanding: `bjahoor/lift-cube-rollouts-10k`,
+a checkpoint the head has never seen, and the live in-the-loop eval.
 
-It reaches a remote viewer because the livestream carries the whole application window, and Isaac Lab
-un-hides the UI specifically when livestreaming. Isaac Lab builds its own window this way, so the pattern
-already renders under our launch.
+Earliness is also unmeasured, and it is the claim that matters. A head that only fires once
+the cube is visibly still on the table at step 400 scores exactly this.
 
-Built only when `sim.has_gui()`, so a plain headless run is unaffected.
+## 3. Cost
 
-`LiveLinePlot` must be constructed inside the parented frame. Its `__init__` reads attributes assigned after
-it, and works at all only because `ui.Frame(build_fn=...)` builds lazily.
-
-## 2. Not in the scene
-
-A bar drawn above the robot would be simpler and is the obvious idea. It lands in `wrist_cam` and
-`table_cam`, which are the policy's observations, so the readout would change the behaviour it is reporting
-on. Same reason the goal marker is off in [phase 07](phase_07.md).
-
-`debug_draw` was the other candidate. It has no text at all — points and lines only.
-
-## 3. TCE and ACM
-
-The head takes two scalars beside the tokens, and they must arrive on the scale training used or the head
-reads a number it has never seen, silently.
-
-Both are recomputed here frame by frame, mirroring `train_critic.compute_tce_acm`. The scaler is loaded from
-`critic.pt`, where training saved it beside the weights. The checkpoint's own action mean and std normalize
-the chunk first.
-
-Without a trained head the script still runs — random weights, noise on the bars, enough to check the
-display.
-
-## 4. Known cost
-
-The trunk runs twice per env per step. TCE and ACM come from this frame's chunk, so the chunk is needed
-before the head can be called, and `critic_score` predicts it again internally.
-
-Correct, not free. The fix is to move the calculation inside the head, which already keeps a frame history.
+Cache build 200 episodes, ~3 min. Training, ~7 s an epoch. The GPU is idle most of that —
+the head is 0.1M parameters and the data path is the constraint, not the 3060 Ti.

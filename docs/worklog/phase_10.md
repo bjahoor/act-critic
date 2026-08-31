@@ -1,73 +1,129 @@
-# Phase 10 — The Model File
+# Phase 10 — Critic Head
 
-`src/modeling_act_critic.py`. Design is [phase 09](phase_09.md); this is what it took to build.
+## 1. What the encoder outputs
 
-## 1. Reaching the encoder output
+ResNet18 turns each 200x200 image into a 7x7 grid of 512-dim patches. The encoder's 4 self-attention layers
+return the same count.
 
-The encoder output is handed straight to the decoder and never returned. A forward hook on `model.encoder`
-takes a copy as it passes, so LeRobot's file stays untouched and upgrades do not fork. `vae_encoder` is a
-separate instance, so the hook catches only the right one.
+| Token | Count | |
+|---|---|---|
+| wrist patches | 49 | 7x7 grid over the image |
+| table patches | 49 | |
+| `observation.state` | 1 | the 7 arm joints |
+| latent `z` | 1 | zeros going in; the encoder mixes the other tokens into it |
+| | **100** | 512 each |
 
-## 2. Two classes
+This is everything the decoder is given. A missed grasp is the gripper patch and the cube patch being
+different patches, so pooling the 98 would destroy the evidence. The head reads all 100.
 
-`CriticHead` takes tokens as an argument and knows nothing about ACT — training feeds it cached output, so
-the trunk is absent rather than merely frozen. `ACTWithCritic` is the deployed pair.
+## 2. Where the head attaches
 
-## 3. The head
+A parallel branch off the encoder. The decoder is untouched and the trunk is frozen, so the action chunk is
+bit-identical with the head attached or removed.
 
 ```
-  ABMIL — how much does each token matter               the head, end to end
-
-    token 1    ──>  0.5%  ┐                             4 frames x 100 tokens (512)
-    token 2    ──>  0.3%  │                                          │
-       ...                ├──> blend by weight                Linear 512 -> 128
-    token 47   ──>   62%  │         │                                │
-    token 48   ──>   30%  │         v                             dropout 0.1
-    token 100  ──>  0.1%  ┘    pooled (128)                          │
-                                                              ABMIL, per frame
-    47 is the gripper, 48 the cube.                                  │
-    An average gives all 100 an equal 1%.                 4 x 128 concatenated
-                                                                     │
-    scoring one token:                                    + TCE + ACM  = 514
-        ──> tanh(V·) ─┐                                              │
-                      ⊙ ──> one number                        Linear 514 -> 1
-        ──> sigm(U·) ─┘  then softmax over 100                       │
-            the gate                                               sigmoid
-                                                                     │
-                                                               failure_score
+  wrist ──┐
+          ├──> ResNet18 ──> 98 patches ──┐
+  table ──┘     (frozen)                 │
+                                         │
+  state ──────────────────> 1 token ─────┼──> encoder ──> scene tokens ──┬──> decoder ──> action chunk
+                                         │     (frozen)     (100, 512)   │    (frozen)       (100, 9)
+  z = 0 ──────────────────> 1 token ─────┘                               │                       │
+                                                                      detach                     v
+                                                                         │                   TCE, ACM
+                                                                         │  ┌───────────────┐    │
+                                                                         └─>│  critic head  │<───┘
+                                                                            └───────┬───────┘
+  TCE  temporal consistency error                                                   │
+  ACM  action chunk magnitude                                                       v
+                                                                              failure_score
+                                                                                0 = fine
+                                                                               1 = failing
 ```
 
-ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
-summing to 1, and blends the tokens by them.
-Mean pooling is the same operation with every weight fixed at 1/100.
+Added: the critic head, TCE and ACM. `detach` is the one place a gradient could reach the trunk.
 
-The score comes from two branches — `tanh(V)` for what is in the token, `sigmoid(U)` as a gate — multiplied
-together. The gate is what makes it *gated*: `tanh` alone is near-linear around zero and cannot suppress a
-dimension outright.
+TCE and ACM are arithmetic on the decoder's output, not learned. Only 10 of the 100 planned steps run before
+replanning, so consecutive chunks overlap by 90 and TCE reads that overlap. Both enter at the head's output
+because two scalars have nowhere to attend.
 
-Frames are pooled separately and concatenated, so the ordering survives.
+`failure_score` is squashed to 0-1 inside the head, from a raw value the loss keeps internal. It is not
+calibrated and carries no threshold — that is the harness's choice.
 
-## 4. Frozen, and shown to be
+## 3. Inside the head
+
+Pool the 100 tokens into one vector, then score it alongside TCE and ACM. Pooling is the whole design; the
+scorer is a linear layer either way.
+
+| Pooling | Params | |
+|---|---|---|
+| mean-pool + MLP | 0.066 M | control |
+| **ABMIL gated attention** | **0.033 M** | **picked** |
+| 1-query cross-attention | 0.066 M | |
+| CLAM | more | ABMIL plus a loss over pseudo-labelled tokens |
+
+ABMIL — attention-based multiple instance learning — scores each token and takes a weighted sum.
+Cross-attention would judge tokens against each other, but the encoder's 4 self-attention layers already did
+that, so it pays double to redo the frozen trunk's work.
+
+CLAM's extra loss answers attention spreading thin across 10k tiles; there are 100 tokens here. It is the fix
+if attention collapses onto one or two tokens.
+
+Mean-pool is a control, not a strawman — attentive probing only clearly beats pooling in few-shot settings.
+If it ties, attention did not earn its place.
+
+Every option exceeds 200 samples in parameter count. Dropout and early stopping are load-bearing.
+
+[ABMIL](https://proceedings.mlr.press/v80/ilse18a.html) is the standard aggregator in computational
+pathology. I found no use of it in robotics.
+
+## 4. Approach
 
 | | |
 |---|---|
-| trainable | 99,332 |
-| frozen | 51,601,289 |
-| trunk after 20 head steps | bit-identical |
-| action chunk after 20 head steps | bit-identical |
+| Trunk | `bjahoor/act-lift-cube-franka-v2-20k`, frozen |
+| Tap | scene tokens, the encoder output |
+| Head | ABMIL gated attention pooling, 512 -> 128, linear scorer |
+| Extra inputs | TCE and ACM, concatenated at the output |
+| Output | `failure_score`, 0-1 |
+| History | four frames: now, 0.1 s, 0.2 s, 0.3 s back |
+| Labels | as recorded, episode-wide |
+| Imbalance | untouched |
+| Regularization | dropout 0.1, early stopping on held-out average precision |
 
-The last two are the claim worth making, so they are checked tensor by tensor rather than asserted.
+Dropout 0.1 is ACT's own value rather than one picked here. Early stopping watches average precision because
+accuracy is gameable at 24/76. Four frames rather than one so a descent toward the cube is distinguishable
+from one past it.
 
-## 5. Bug
+## 5. Data
 
-`ACTPolicy.__init__` calls `reset()` on its last line, before the subclass has built its history buffer.
-Construction died before the checkpoint ever loaded. `reset()` guards on `hasattr`.
+| | | |
+|---|---|---|
+| Train | `bjahoor/lift-cube-rollouts-20k-200` | 98 success / 102 failure |
+| Tune against | `bjahoor/lift-cube-rollouts-20k` | the earlier 100, seconds per try |
+| Transfer test | `bjahoor/lift-cube-rollouts-10k` | a checkpoint the head never saw |
 
-## 6. Two choices in the code
+The reported number comes from fresh rollouts with the head in the loop, once, on the frozen design. The sim
+auto-labels those, so it is a measurement and not an impression.
 
-Until the history fills, `critic_score` returns None rather than padding with copies of the first frame —
-padding would invent stillness exactly where the approach is being decided. Costs the first 0.3 s of an
-episode; the failure is decided around 1.0-1.8 s.
+Every failure in all three sets is a timeout; there are no drops, because the drop check only fires when the
+cube leaves the table and this policy fails by missing the grasp. The head is trained and evaluated on
+exactly one failure mode. Nothing here supports a claim of generality.
 
-`GatedAttentionPool` returns its per-token weights. Drawn over the wrist image they say whether the head
-learned to watch the gripper or a corner of the table. Free, since they are already computed.
+## 6. Imbalance, left alone
+
+Failures run to the 500-step giveup and successes finish in ~150, so failures are 76% of frames despite being
+51% of episodes. 2:1 is mild, thresholding beats reweighting for deep models, and the threshold sweep is
+already being run to measure precision and recall. Class weighting is the fix if the head answers "failing"
+everywhere.
+
+## 7. What it could cheat on
+
+The cube position is randomized per episode and plainly visible, so the head could learn "cube at this spot
+failed" and never look at the gripper. The signature is a gap between training and held-out scores.
+
+A label derived from `object_pos` would test the labelling rule rather than the head, so `object_pos` and
+`termination` are evaluation instruments only.
+
+Beat: always-fail, frame index alone, TCE thresholded. Headline metric is earliness — precision and recall
+alone look fine for a head that fires only once the episode is visibly lost.

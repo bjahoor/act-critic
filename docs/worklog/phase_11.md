@@ -1,70 +1,73 @@
-# Phase 11 — Training Script
+# Phase 11 — The Model File
 
-`src/scripts/train_critic.py`. Cache the frozen trunk's output once, then train the head on it.
+`src/modeling_act_critic.py`. Design is [phase 10](phase_10.md); this is what it took to build.
 
-## 1. Why a cache
+## 1. Reaching the encoder output
 
-The trunk never changes, so its output for a frame is fixed. Decoding 200 videos every epoch would dominate
-the run; decoding once and writing the encoder output does not. It also makes the stop-gradient claim
-structural — ACT is not loaded during head training at all.
+The encoder output is handed straight to the decoder and never returned. A forward hook on `model.encoder`
+takes a copy as it passes, so LeRobot's file stays untouched and upgrades do not fork. `vae_encoder` is a
+separate instance, so the hook catches only the right one.
 
-One file per episode, `float16`, ~30 MB per 500-step episode. Both caches together are ~10 GB, keyed by
-dataset and checkpoint so the transfer set cannot silently reuse the training set's.
+## 2. Two classes
 
-## 2. TCE and ACM
+`CriticHead` takes tokens as an argument and knows nothing about ACT — training feeds it cached output, so
+the trunk is absent rather than merely frozen. `ACTWithCritic` is the deployed pair.
 
-Computed from the saved chunks, normalized with the checkpoint's own action statistics. Raw, the arm's
-radians dwarf the fingers' metres. TCE compares a chunk against the one 10 steps back, over the 90 they
-overlap — adjacent chunks differ mostly by noise, and 10 is the real replan interval.
+## 3. The head
 
-Verified: a policy repeating one plan gives TCE exactly 0, one replanning with unit noise gives 2.
+```
+  ABMIL — how much does each token matter               the head, end to end
 
-## 3. Bug found by review — the deployed head saw 2 frames, not 4
+    token 1    ──>  0.5%  ┐                             4 frames x 100 tokens (512)
+    token 2    ──>  0.3%  │                                          │
+       ...                ├──> blend by weight                Linear 512 -> 128
+    token 47   ──>   62%  │         │                                │
+    token 48   ──>   30%  │         v                             dropout 0.1
+    token 100  ──>  0.1%  ┘    pooled (128)                          │
+                                                              ABMIL, per frame
+    47 is the gripper, 48 the cube.                                  │
+    An average gives all 100 an equal 1%.                 4 x 128 concatenated
+                                                                     │
+    scoring one token:                                    + TCE + ACM  = 514
+        ──> tanh(V·) ─┐                                              │
+                      ⊙ ──> one number                        Linear 514 -> 1
+        ──> sigm(U·) ─┘  then softmax over 100                       │
+            the gate                                               sigmoid
+                                                                     │
+                                                               failure_score
+```
 
-`critic_score` read whatever the encoder hook last caught, but `select_action` only runs the encoder every
-`n_action_steps`, which is 10. So the four history frames were duplicates of two, 0.2 s apart, while training
-used four distinct frames from `predict_action_chunk` on every frame.
+ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
+summing to 1, and blends the tokens by them.
+Mean pooling is the same operation with every weight fixed at 1/100.
 
-Training and deployment disagreeing on the input, silently, and it would have shown up only as the head
-underperforming in the live eval. `critic_score` now runs the trunk itself and returns the chunk, so the
-caller takes TCE and ACM from it rather than paying for a second pass.
+The score comes from two branches — `tanh(V)` for what is in the token, `sigmoid(U)` as a gate — multiplied
+together. The gate is what makes it *gated*: `tanh` alone is near-linear around zero and cannot suppress a
+dimension outright.
 
-## 4. Metric
+Frames are pooled separately and concatenated, so the ordering survives.
 
-Frame AP is nearly saturated by episode length: failures run to the 500-step giveup, successes stop at ~150.
-Measured on the tune cache, frame index alone scores **0.913**. Early stopping watches episode AP instead —
-the mean score over an episode against its label — where there are 100 samples, not 29,221.
-
-Baselines printed at startup, so a result is never read without them:
+## 4. Frozen, and shown to be
 
 | | |
 |---|---|
-| always-fail, episode AP | 0.420 |
-| always-fail, frame AP | 0.696 |
-| frame index, frame AP | 0.913 |
-| TCE alone, episode AP | 0.829 |
+| trainable | 99,332 |
+| frozen | 51,601,289 |
+| trunk after 20 head steps | bit-identical |
+| action chunk after 20 head steps | bit-identical |
 
-TCE alone is the bar.
+The last two are the claim worth making, so they are checked tensor by tensor rather than asserted.
 
-## 5. Feeding the GPU
+## 5. Bug
 
-The head is 0.1M parameters and runs at 25,000 samples/s in 1.1 GB of the 3060 Ti's 8. The data path, not the
-GPU, is the constraint: each sample is four frames of 100x512.
+`ACTPolicy.__init__` calls `reset()` on its last line, before the subclass has built its history buffer.
+Construction died before the checkpoint ever loaded. `reset()` guards on `hasattr`.
 
-| | before | after |
-|---|---|---|
-| throughput | 2,155 /s | 4,040 /s |
-| across PCIe | 819 KB, float32 | 410 KB, float16 |
-| anonymous RAM, one epoch | +9.6 GB | +0.89 GB |
+## 6. Two choices in the code
 
-`.npz` was the cause of the memory: `mmap_mode` is silently ignored on it, so every worker built its own
-uncompressed copy. Tokens are a bare `.npy` now, memory-mapped and shared. The cast to float32 moved into the
-head, after the transfer.
+Until the history fills, `critic_score` returns None rather than padding with copies of the first frame —
+padding would invent stillness exactly where the approach is being decided. Costs the first 0.3 s of an
+episode; the failure is decided around 1.0-1.8 s.
 
-The GPU is still idle most of the time. It does not matter — an epoch is ~7 s and the whole run is minutes.
-
-## 6. Unverified
-
-The cache is built from AV1-encoded video; the robot sees raw sim RGB. Frozen ResNet features are not
-invariant to that, and the source frames were deleted after encoding, so it could not be measured. Keeping a
-few hundred raw frames on the next recording would settle it.
+`GatedAttentionPool` returns its per-token weights. Drawn over the wrist image they say whether the head
+learned to watch the gripper or a corner of the table. Free, since they are already computed.
