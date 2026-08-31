@@ -77,5 +77,6 @@ Mean pooling is the same operation with every weight fixed at 1/100.
 | 13 | [Training Run](docs/worklog/phase_13.md) | 0.99 episode AP, and why that number is optimistic |
 | 14 | [Held-Out Measurement](docs/worklog/phase_14.md) | The honest numbers: 94% caught, 4% false alarms, first alarm at 1.86 s |
 | 15 | [Live Score Display](docs/worklog/phase_15.md) | The on-screen readout, streamed |
+| 16 | [Live Demo](docs/worklog/phase_16.md) | Running it: three checkpoints, and what the demo does not measure |
 
 See [docs/stack.md](docs/stack.md) for versions and hardware.
