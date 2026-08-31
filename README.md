@@ -12,7 +12,7 @@ reading its own perception rather than inferring from the outside.
 
 ---
 
-## TL;DR
+# TL;DR
 
 | | |
 |---|---|
@@ -28,7 +28,7 @@ reading its own perception rather than inferring from the outside.
 
 ---
 
-## Runtime Demo
+# Runtime Demo
 
 The live demo, streamed out of Isaac Sim. Recorded runs are in [docs/videos/](docs/videos/).
 
@@ -38,7 +38,7 @@ The gripper closed just above the cube. The score climbs once the grasp misses.
 
 ---
 
-## Runtime Loop
+# Runtime Loop
 
 What happens on every step at runtime.
 
@@ -68,7 +68,7 @@ What happens on every step at runtime.
 
 ---
 
-## Critic Head
+# Critic Head
 
 My modified ACT architecture. The critic head I added branches off the transformer encoder's output.
 
@@ -96,7 +96,7 @@ My modified ACT architecture. The critic head I added branches off the transform
 
 ---
 
-## Inside the Critic Head
+# Inside the Critic Head
 
 Inside that box. 100 scene tokens and two scalars in, one score out.
 
@@ -135,7 +135,7 @@ The tokens go through the whole stack; TCE and ACM skip it and join just before 
 
 ---
 
-## ABMIL, per frame (attention-based multiple instance learning)
+# ABMIL, per frame (attention-based multiple instance learning)
 
 Gated attention pooling from [Ilse et al., ICML 2018](https://arxiv.org/abs/1802.04712), eq. 9. Ours matches it step for step.
 
@@ -211,40 +211,45 @@ ABMIL is attention pooling, with a gate.
       softmax(s)ᵢ = e^sᵢ / Σ e^sⱼ
 ```
 
-The learned weights, measured on held-out rollouts:
+## The learned weights
 
-| token | weight | |
+`aₖ`, the NORMALIZE output, averaged over 79,331 frames of unseen rollouts.
+
+| k (token) | aₖ (weight) | |
 |---|---|---|
-| 96 | 1.44% | table camera, highest |
-| 97 | 1.41% | |
-| 2 | 1.01% | |
-| 35 | 0.69% | wrist camera, lowest |
+| $\textcolor{#00b050}{96}$ | 1.398% | table camera, bottom row, 4th of 7 — highest |
+| $\textcolor{#00b050}{97}$ | 1.390% | table camera, bottom row, 5th of 7 |
+| $\textcolor{#00b050}{98}$ | 1.306% | table camera, bottom row, 6th of 7 |
+| ... | ... | |
+| 0 | 0.969% | z, the latent — 65th of 100 |
+| ... | ... | |
+| 1 | 0.801% | arm state — 82nd of 100 |
+| ... | ... | |
+| $\textcolor{#e01e37}{33}$ | 0.714% | wrist camera, 5th row, 4th of 7 |
+| $\textcolor{#e01e37}{34}$ | 0.710% | wrist camera, 5th row, 5th of 7 |
+| $\textcolor{#e01e37}{35}$ | 0.701% | wrist camera, 5th row, 6th of 7 — lowest |
 
-An even split is 1.00%; the top ten hold 13.2% where an average gives 10%.
+An even split is 1.00%. The top ten hold 12.9% where an average gives 10%.
 
-ABMIL — attention-based multiple instance learning — scores every token, softmaxes the scores into weights
-summing to 1, and blends the tokens by them. Mean pooling is the same operation with every weight fixed at
-1/100.
+## Every token
 
-`tanh` squeezes a number to between -1 and +1. `sigmoid` squeezes it to between 0 and 1, which is what makes
-it a gate — near 0 shuts a dimension off, near 1 lets it through. `⊙` multiplies the two results position by
-position, and `softmax` turns the 100 scores into percentages adding to 100%.
+<img src="docs/images/attention_grid.png" width="1000" alt="Attention weight of every token, both camera grids">
 
 ---
 
-## Worklog
+# Worklog
 
 The full build, phase by phase: [docs/worklog.md](docs/worklog.md).
 
 ---
 
-## Stack
+# Stack
 
 Versions and hardware: [docs/stack.md](docs/stack.md).
 
 ---
 
-## Run It
+# Run It
 
 ```bash
 LIVESTREAM=1 PUBLIC_IP=<lan-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh src/scripts/eval_critic.py --model 20k --enable_cameras
