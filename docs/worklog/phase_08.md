@@ -5,32 +5,46 @@ Roll out a fallible checkpoint and keep both outcomes.
 ## 1. Record
 
 ```bash
-LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python PYTHONPATH=$PWD/src ~/isaacsim/python.sh \
-  src/scripts/eval_policy.py --model 20k --num_envs 8 --num_rollouts 100 --enable_cameras \
-  --record --dataset_root datasets/rollouts-20k --repo_id bjahoor/lift-cube-rollouts-20k --overwrite
+PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
+  src/scripts/eval_policy.py --model 20k --num_envs 12 --num_rollouts 200 --enable_cameras --headless \
+  --record --dataset_root datasets/rollouts-20k-200 --repo_id bjahoor/lift-cube-rollouts-20k-200 --overwrite
 ```
 
-20k fails often enough to be interesting and succeeds often enough to be a policy. 8 envs, 8 minutes, peak 6.4 GB of 8.
+12 envs, 25 minutes, peak 7.2 GB of 8. Headless saves ~450 MB over streaming.
 
-| | Episodes | Frames |
-|---|---|---|
-| Success | 58 | 9760 |
-| Failure | 42 | 20961 |
+## 2. Three sets
 
-The ratio inverts at frame level — failures run to the 500-step giveup, successes finish in ~150 — and the head trains
-per frame.
+| Checkpoint | Episodes | Success | Frames success/fail | Use |
+|---|---|---|---|---|
+| 20k | 200 | 49% | 24/76 | Train |
+| 10k | 200 | 25% | 9/91 | Transfer test |
+| 20k | 100 | 58% | 32/68 | Fast offline loop |
 
-All 42 failures are timeouts, none dropped the cube. Late in such an episode the cube is visibly still on the table, so
-a head can learn "late equals failure" and beat the metric while being useless. Earliness is the real result.
+The head trains per frame, and the ratio inverts there — failures run to the 500-step giveup, successes finish in ~150.
 
-## 2. Push
+Balance decides whether the result is readable. A detector that says fail on every frame scores F1 0.86 on the 20k
+set and 0.94 on the 10k one. The second is unusable: skill and skew are indistinguishable.
+
+The transfer set is a different checkpoint, so it tests whether the head works on a policy it never saw. That only
+holds if the trunks stay separate — do not pool.
+
+## 3. One failure mode
+
+Every failure across all three sets is a timeout. Zero drops. The drop check only fires when the cube leaves the table
+entirely, and this policy fails by arriving misaligned and missing the grasp, then retrying until the giveup.
+
+So the head is trained and evaluated on one failure mode. Any claim about generality is unsupported by this data.
+
+## 4. Push
 
 Chunks live outside the dataset directory, so they go up separately.
 
 ```bash
 .venv-lerobot/bin/python src/scripts/push_dataset.py \
-  --repo_id bjahoor/lift-cube-rollouts-20k --root datasets/rollouts-20k
+  --repo_id bjahoor/lift-cube-rollouts-20k-200 --root datasets/rollouts-20k-200
 ```
 
-[rollouts](https://huggingface.co/datasets/bjahoor/lift-cube-rollouts-20k) ·
-[chunks](https://huggingface.co/datasets/bjahoor/lift-cube-rollouts-20k-chunks)
+[train](https://huggingface.co/datasets/bjahoor/lift-cube-rollouts-20k-200) ·
+[chunks](https://huggingface.co/datasets/bjahoor/lift-cube-rollouts-20k-200-chunks) ·
+[transfer](https://huggingface.co/datasets/bjahoor/lift-cube-rollouts-10k) ·
+[transfer chunks](https://huggingface.co/datasets/bjahoor/lift-cube-rollouts-10k-chunks)
