@@ -36,9 +36,11 @@ model. The trunk is frozen, so the action chunk is bit-identical with the head a
 
 ## Inside the critic head
 
-Inside that box. 100 scene tokens and two scalars in, one score out. Trained by
-[src/scripts/train_critic.py](src/scripts/train_critic.py) and scored by
-[src/scripts/measure_critic.py](src/scripts/measure_critic.py).
+Inside that box. 100 scene tokens and two scalars in, one score out.
+
+Trained by [src/scripts/train_critic.py](src/scripts/train_critic.py)
+
+Scored by [src/scripts/measure_critic.py](src/scripts/measure_critic.py)
 
 ```
   ABMIL — how much does each token matter               the head, end to end
