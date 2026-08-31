@@ -172,14 +172,17 @@ def main():
     assert joint_names[:7] == [f"panda_joint{i}" for i in range(1, 8)], joint_names
     assert all("finger" in n for n in joint_names[7:]), joint_names
 
-    # load the policy. ACT keeps one action queue for the whole batch with no per-env
-    # reset, so more than one env would feed an env another env's chunk
-    assert env.unwrapped.num_envs == 1, "ACT holds a single shared action queue, use --num_envs 1"
+    # one policy per env. ACT keeps a single action queue for the whole batch with no
+    # per-env reset, so a shared instance would hand a freshly reset env another env's
+    # chunk. identical weights, ~200 MB each
     checkpoint = CHECKPOINTS[args_cli.model]
-    policy = ACTPolicy.from_pretrained(checkpoint)
-    policy.eval()
+    policies = []
+    for _ in range(env.unwrapped.num_envs):
+        policy = ACTPolicy.from_pretrained(checkpoint)
+        policy.eval()
+        policies.append(policy)
     # n_action_steps and chunk_size are baked into the checkpoint, do not override them
-    preprocessor, postprocessor = make_pre_post_processors(policy.config, pretrained_path=checkpoint)
+    preprocessor, postprocessor = make_pre_post_processors(policies[0].config, pretrained_path=checkpoint)
 
     # steps taken in the current episode, per env
     episode_steps = torch.zeros(env.unwrapped.num_envs, dtype=torch.long, device=env.unwrapped.device)
@@ -206,7 +209,7 @@ def main():
         # per frame, so it goes beside the dataset rather than in it
         chunk_dir = Path(f"{args_cli.dataset_root}_chunks")
         chunk_dir.mkdir(parents=True, exist_ok=True)
-        chunks: list[np.ndarray] = []
+        chunks: list[list[np.ndarray]] = [[] for _ in range(env.unwrapped.num_envs)]
 
     finished = 0
     succeeded_count = 0
@@ -230,9 +233,15 @@ def main():
                 "task": [TASK] * env.unwrapped.num_envs,
             }
             batch = preprocessor(batch)
-            # select_action only predicts every n_action_steps, TCE needs one per step
-            chunk = postprocessor(policy.predict_action_chunk(batch)) if recorder is not None else None
-            actions = postprocessor(policy.select_action(batch)).to(env.unwrapped.device)
+            # each env's own policy, one env's slice at a time, so the queues stay private
+            actions = torch.zeros_like(joint_pos)
+            chunk = [None] * env.unwrapped.num_envs
+            for env_id, policy in enumerate(policies):
+                one = {k: (v[env_id : env_id + 1] if torch.is_tensor(v) else v[:1]) for k, v in batch.items()}
+                # select_action only predicts every n_action_steps, TCE needs one per step
+                if recorder is not None:
+                    chunk[env_id] = postprocessor(policy.predict_action_chunk(one))[0]
+                actions[env_id] = postprocessor(policy.select_action(one))[0].to(env.unwrapped.device)
             # the demos only ever held the fingers fully open or fully closed, so ACT
             # regresses the midpoint when unsure and the gripper never grips. snap it back
             actions[:, 7:] = torch.where(actions[:, 7:] < FINGER_CLOSE_BELOW, 0.0, FINGER_OPEN)
@@ -259,7 +268,7 @@ def main():
                         env_id, wrist[env_id], table[env_id], state[env_id], actions[env_id], object_pos[env_id]
                     )
                     # one chunk per recorded frame, or the two drift apart by a step
-                    chunks.append(chunk[env_id].cpu().numpy())
+                    chunks[env_id].append(chunk[env_id].cpu().numpy())
                 skip_record[:] = False
 
             # reset the finished envs and the policy's action queue
@@ -268,8 +277,9 @@ def main():
                 # reset returns fresh observations. without them ACT predicts its next
                 # chunk from the finished episode's last frame and acts on it for 10 steps
                 obs = env.unwrapped.reset(env_ids=done_ids)[0]
-                # the queue is shared, so a new episode would otherwise inherit the old chunk
-                policy.reset()
+                # only the finished env's policy, the others are mid-chunk
+                for env_id in done_ids.tolist():
+                    policies[env_id].reset()
                 episode_steps[done_ids] = 0
                 held_steps[done_ids] = 0
                 skip_record[done_ids] = True
@@ -279,8 +289,8 @@ def main():
                     if recorder is not None:
                         reason = SUCCESS if succeeded[env_id] else (DROPPED if dropped[env_id] else TIMEOUT)
                         # named by the episode index the recorder is about to write
-                        np.save(chunk_dir / f"episode_{recorder.saved:06d}.npy", np.stack(chunks))
-                        chunks = []
+                        np.save(chunk_dir / f"episode_{recorder.saved:06d}.npy", np.stack(chunks[env_id]))
+                        chunks[env_id] = []
                         recorder.finish(env_id, success=bool(succeeded[env_id]), reason=reason)
                 print(f"[EVAL] {succeeded_count}/{finished} succeeded", flush=True)
 

@@ -53,7 +53,8 @@ The state machine and its warp kernel are deleted. `--model` picks a checkpoint.
 | `25k` | `bjahoor/act-lift-cube-franka-v2-25k` |
 | `50k` | `bjahoor/act-lift-cube-franka-v2` |
 
-`--num_envs 1`, asserted — one action queue for the whole batch, no per-env reset. `policy.reset()` at every boundary.
+One policy instance per env — ACT's action queue is shared across the batch with no per-env reset. Identical weights,
+~200 MB each.
 
 ## 4. Chunks
 
@@ -67,13 +68,13 @@ Success rate only.
 
 ```bash
 LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 50k --num_rollouts 50 --enable_cameras
+  scripts/eval_policy.py --model 50k --num_envs 4 --num_rollouts 50 --enable_cameras
 ```
 
 Rollouts for the head.
 
 ```bash
 LIVESTREAM=1 PUBLIC_IP=<server-ip> PYTHONEXE=$PWD/.venv-lerobot/bin/python ~/isaacsim/python.sh \
-  scripts/eval_policy.py --model 25k --num_rollouts 300 --enable_cameras \
+  scripts/eval_policy.py --model 25k --num_envs 4 --num_rollouts 300 --enable_cameras \
   --record --dataset_root datasets/rollouts --overwrite
 ```
