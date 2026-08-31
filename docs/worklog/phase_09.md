@@ -23,12 +23,11 @@ return the same count.
 | wrist patches | 49 | 7x7 grid over the image |
 | table patches | 49 | |
 | `observation.state` | 1 | the 7 arm joints |
-| latent `z` | 1 | zeros at inference, so constant across every frame |
+| latent `z` | 1 | zeros going in; the encoder mixes the other tokens into it |
 | | **100** | 512 each |
 
 This is everything the decoder is given. A missed grasp is the gripper patch and the cube patch being
-different patches, so pooling the 98 would destroy the evidence. The head reads all 100; `z` is constant and
-learned around.
+different patches, so pooling the 98 would destroy the evidence. The head reads all 100.
 
 ## 3. Where the head attaches
 

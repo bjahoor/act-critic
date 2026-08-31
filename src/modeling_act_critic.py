@@ -84,7 +84,8 @@ class CriticHead(nn.Module):
         the attention weights.
         """
         b, t, n, _ = tokens.shape
-        x = self.dropout(self.project(tokens)).reshape(b * t, n, -1)
+        # the cache is float16 to halve what crosses PCIe; a no-op when already float32
+        x = self.dropout(self.project(tokens.float())).reshape(b * t, n, -1)
         pooled, weights = self.pool(x)
         logit = self.score(torch.cat([pooled.reshape(b, -1), tce, acm], dim=-1))
         return {
@@ -128,17 +129,21 @@ class ACTWithCritic(ACTPolicy):
             self._history.clear()
 
     @torch.no_grad()
-    def critic_score(self, batch: dict[str, Tensor], tce: Tensor, acm: Tensor) -> dict[str, Tensor]:
-        """Score the current frame. Call after select_action, which fills the hook.
+    def critic_score(self, batch: dict[str, Tensor], tce: Tensor, acm: Tensor) -> dict[str, Tensor] | None:
+        """Score the current frame, and return the action chunk it was scored from.
 
-        Returns None until the history has filled, which takes 0.3 s of an episode. The
-        alternative is padding with copies of the first frame, which would invent motion
-        that did not happen at exactly the point the approach is being decided.
+        The encoder must run on every frame. `select_action` only runs it every
+        `n_action_steps` — 10 for this checkpoint — so relying on whatever the hook last
+        caught gives a history of 2 distinct frames where training used 4, silently. This
+        calls the trunk itself, and hands back the chunk so the caller can take TCE and ACM
+        from it rather than paying for a second pass.
+
+        Returns None until the history fills, 0.3 s into an episode. Padding with copies of
+        the first frame would invent stillness exactly where the approach is decided.
         """
-        if self._tokens is None:
-            raise RuntimeError("no encoder output captured; call select_action first")
+        chunk = self.predict_action_chunk(batch)
         self._history.append(self._tokens)
         if len(self._history) <= max(HISTORY_OFFSETS):
             return None
         tokens = torch.stack([self._history[-1 - k] for k in HISTORY_OFFSETS], dim=1)
-        return self.critic(tokens, tce, acm)
+        return {**self.critic(tokens, tce, acm), "action_chunk": chunk}
