@@ -137,7 +137,7 @@ The tokens go through the whole stack; TCE and ACM skip it and join just before 
 
 # ABMIL, per frame (attention-based multiple instance learning)
 
-Gated attention pooling from [Ilse et al., ICML 2018](https://arxiv.org/abs/1802.04712), eq. 9. Ours matches it step for step.
+Gated attention pooling from [Ilse et al., ICML 2018](https://arxiv.org/abs/1802.04712). Ours matches it step for step.
 
 Pooling blends 100 tokens into 1.
 
