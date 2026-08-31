@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import torch
 
-from modeling_act_critic import HISTORY_OFFSETS, CriticHead
+from modeling.act_critic import HISTORY_OFFSETS, CriticHead
 from train_critic import CachedFrames, average_precision, build_cache, cache_path
 
 FPS = 50

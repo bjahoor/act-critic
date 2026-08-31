@@ -72,7 +72,7 @@ What happens on every step at runtime.
 
 My modified ACT architecture. The critic head I added branches off the transformer encoder's output.
 
-[src/modeling_act_critic.py](src/modeling_act_critic.py)
+[src/modeling/act_critic.py](src/modeling/act_critic.py)
 
 ```
   wrist ──┐

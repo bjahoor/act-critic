@@ -15,7 +15,7 @@ One robot, running until the window is closed.
 import sys
 from pathlib import Path
 
-# src/ on the path, so `recording` and `modeling_act_critic` import however this is launched
+# src/ on the path, so `recording` and `modeling.act_critic` import however this is launched
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
@@ -80,7 +80,7 @@ from huggingface_hub import snapshot_download
 from lerobot.policies.factory import make_pre_post_processors
 from safetensors.torch import load_file
 
-from modeling_act_critic import HISTORY_OFFSETS, ACTWithCritic
+from modeling.act_critic import HISTORY_OFFSETS, ACTWithCritic
 from recording.lerobot_recorder import TASK
 
 # give up on an episode after this many steps. the expert finished in ~150, ACT is slower

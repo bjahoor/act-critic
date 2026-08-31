@@ -1,6 +1,6 @@
 # Phase 11 — The Model File
 
-`src/modeling_act_critic.py`. Design is [phase 10](phase_10.md); this is what it took to build.
+`src/modeling/act_critic.py`. Design is [phase 10](phase_10.md); this is what it took to build.
 
 ## 1. Reaching the encoder output
 

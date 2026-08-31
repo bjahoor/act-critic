@@ -4,7 +4,7 @@
 
 ```
 src/
-  modeling_act_critic.py
+  modeling/act_critic.py
   recording/lerobot_recorder.py
   scripts/
 ```

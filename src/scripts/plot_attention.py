@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from modeling_act_critic import CriticHead  # noqa: E402
+from modeling.act_critic import CriticHead  # noqa: E402
 from scripts.train_critic import CachedFrames, cache_path  # noqa: E402
 
 TOP, LOW = {96, 97, 98}, {33, 34, 35}

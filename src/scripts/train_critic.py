@@ -25,7 +25,7 @@ from lerobot.policies.factory import make_pre_post_processors
 from safetensors.torch import load_file
 from torch.utils.data import DataLoader, Dataset
 
-from modeling_act_critic import HEAD_DIM, HISTORY_OFFSETS, ACTWithCritic, CriticHead
+from modeling.act_critic import HEAD_DIM, HISTORY_OFFSETS, ACTWithCritic, CriticHead
 
 TASK = "Pick up the cube and lift it to the target position."
 
