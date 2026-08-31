@@ -4,6 +4,8 @@ __pycache__/
 datasets/
 .venv-lerobot
 ${data}/
-checkpoints/
+checkpoints/*
+!checkpoints/critic-abmil/
+!checkpoints/critic-abmil/critic.pt
 .astro/
 node_modules/
