@@ -113,7 +113,7 @@ exactly one failure mode. Nothing here supports a claim of generality.
 ## 6. Imbalance, left alone
 
 Failures run to the 500-step giveup and successes finish in ~150, so failures are 76% of frames despite being
-51% of episodes. 2:1 is mild, thresholding beats reweighting for deep models, and the threshold sweep is
+51% of episodes. 3:1 is mild, thresholding beats reweighting for deep models, and the threshold sweep is
 already being run to measure precision and recall. Class weighting is the fix if the head answers "failing"
 everywhere.
 
