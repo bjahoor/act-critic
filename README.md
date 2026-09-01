@@ -1,14 +1,13 @@
 # act-critic
 
-Over one weekend I built a proof of concept: a modified ACT architecture with a built-in critic head. Start
-to finish, trained and tested in simulation.
+Over the weekend I built a modified ACT architecture with a critic head inside it. One forward pass, two
+outputs — the action chunk, and a failure score.
 
-The task is a Franka Panda arm lifting a cube to a fixed point in Isaac Sim. The policy learns it from
-scripted demonstrations, and lands at a success rate that is deliberately mediocre — it has to fail often
-enough to give the critic head something to detect.
+Runtime failure detectors are usually a second model watching the first. This one reads the policy's own
+perception.
 
-Runtime failure detectors are usually a second model watching the first. This one lives inside the policy,
-reading its own perception rather than inferring from the outside.
+A Franka Panda lifts a cube in Isaac Sim, and the policy is deliberately mediocre — it has to fail often
+enough to detect.
 
 ---
 
@@ -16,6 +15,7 @@ reading its own perception rather than inferring from the outside.
 
 | | |
 |---|---|
+| [Idea](docs/idea.md) | Origin, alternatives, outcome, next. |
 | [Runtime Demo](#runtime-demo) | A picture of it running |
 | [Runtime Loop](#runtime-loop) | What happens on every step at runtime |
 | [Critic Head](#critic-head) | My modified ACT architecture |
